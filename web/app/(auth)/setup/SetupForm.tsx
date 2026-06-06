@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useAuth } from "@/components/AuthProvider";
+import type { Company, User } from "@/lib/spacetimedb-types/types";
 
 export default function SetupForm() {
   const router = useRouter();
@@ -16,24 +18,55 @@ export default function SetupForm() {
 
   const [form, setForm] = useState({
     displayName: "",
-    password: "",
-    confirmPassword: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const { isLoading, user, db } = useAuth();
 
   useEffect(() => {
-    if (!token) {
-      setTokenValid(false);
-      return;
+    if (user && loading && user.isActive) {
+      router.push("/dashboard");
     }
-    // TODO: Validate token via SpacetimeDB
-    setTimeout(() => {
-      setEmail("invited@company.com");
-      setCompanyName("Acme Corp");
-      setTokenValid(true);
-    }, 400);
-  }, [token]);
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (isLoading) return; // Wait for SpacetimeDB to sync
+
+    const resolveInvite = () => {
+      if (!token) {
+        setTokenValid(false);
+        return;
+      }
+
+      let foundUser: User | null = null;
+      let foundCompany: Company | null = null;
+
+      if (!db) return;
+
+      for (const u of db.db.user.iter()) {
+        if (u.inviteToken === token) {
+          foundUser = u;
+          for (const c of db.db.company.iter()) {
+            if (c.id === u.companyId) {
+              foundCompany = c;
+              break;
+            }
+          }
+          break;
+        }
+      }
+
+      if (foundUser && foundCompany && !foundUser.isActive) {
+        setEmail(foundUser.email);
+        setCompanyName(foundCompany.name);
+        setTokenValid(true);
+      } else {
+        setTokenValid(false);
+      }
+    };
+
+    resolveInvite();
+  }, [token, isLoading, db]);
 
   function set(key: string, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -44,10 +77,6 @@ export default function SetupForm() {
     const e: Record<string, string> = {};
     if (!form.displayName.trim() || form.displayName.length < 2)
       e.displayName = "Name must be at least 2 characters.";
-    if (form.password.length < 8)
-      e.password = "Password must be at least 8 characters.";
-    if (form.password !== form.confirmPassword)
-      e.confirmPassword = "Passwords do not match.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -57,12 +86,16 @@ export default function SetupForm() {
     if (!validate()) return;
     setLoading(true);
     try {
-      // TODO: SpacetimeDB accept_invite reducer
-      await new Promise((r) => setTimeout(r, 800));
-      router.push("/dashboard");
-    } catch {
+      if (!db) {
+        setErrors({ submit: "Not connected to server. Please try again." });
+        setLoading(false);
+        return;
+      }
+
+      await db.reducers.acceptInvite({ token: token as string, displayName: form.displayName });
+    } catch (err) {
+      console.error(err);
       setErrors({ submit: "Failed to set up your account. The invite link may have expired." });
-    } finally {
       setLoading(false);
     }
   }
@@ -143,22 +176,11 @@ export default function SetupForm() {
             disabled
             hint="Your email is set by the invite and cannot be changed."
           />
-          <Input
-            label="Create password"
-            type="password"
-            placeholder="Min 8 characters"
-            value={form.password}
-            onChange={(e) => set("password", e.target.value)}
-            error={errors.password}
-          />
-          <Input
-            label="Confirm password"
-            type="password"
-            placeholder="Repeat password"
-            value={form.confirmPassword}
-            onChange={(e) => set("confirmPassword", e.target.value)}
-            error={errors.confirmPassword}
-          />
+
+          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", lineHeight: 1.5 }}>
+            Joining links this invite to your current SpacetimeDB browser identity.
+            CC will not create or store a separate password.
+          </p>
 
           {errors.submit && (
             <div

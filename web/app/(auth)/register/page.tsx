@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -12,12 +13,18 @@ export default function RegisterPage() {
     companyName: "",
     displayName: "",
     email: "",
-    password: "",
-    confirmPassword: "",
     agreed: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const { user, db } = useAuth();
+
+  // If user becomes available (meaning registration succeeded), redirect
+  useEffect(() => {
+    if (user) {
+      router.push("/dashboard");
+    }
+  }, [user, router]);
 
   function set(key: string, value: string | boolean) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -32,10 +39,6 @@ export default function RegisterPage() {
       e.displayName = "Name must be at least 2 characters.";
     if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/))
       e.email = "Enter a valid email address.";
-    if (form.password.length < 8)
-      e.password = "Password must be at least 8 characters.";
-    if (form.password !== form.confirmPassword)
-      e.confirmPassword = "Passwords do not match.";
     if (!form.agreed) e.agreed = "You must accept the terms.";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -45,15 +48,25 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!validate()) return;
 
+    if (!db) {
+      setErrors({ submit: "Not connected to server. Please wait..." });
+      return;
+    }
+
     setLoading(true);
     try {
-      // TODO: integrate SpacetimeDB register_company reducer
-      // await db.callReducer("register_company", [form.companyName, form.displayName, form.email, passwordHash])
-      await new Promise((r) => setTimeout(r, 900)); // placeholder
-      router.push("/dashboard");
-    } catch {
-      setErrors({ submit: "Something went wrong. Please try again." });
-    } finally {
+      await db.reducers.registerCompany({
+        companyName: form.companyName,
+        adminName: form.displayName,
+        email: form.email,
+      });
+      // On success, AuthProvider's onInsert fires, sets user → redirect via useEffect above.
+    } catch (err: unknown) {
+      console.error(err);
+      setErrors({
+        submit:
+          "Company registration failed. The company name or email may already be taken.",
+      });
       setLoading(false);
     }
   }
@@ -65,7 +78,7 @@ export default function RegisterPage() {
 
         <h1 className="auth-title">Create your company</h1>
         <p className="auth-subtitle">
-          Set up CC for your team — you&apos;ll be the admin.
+          Set up CC for your team with your current SpacetimeDB session.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -93,24 +106,6 @@ export default function RegisterPage() {
             value={form.email}
             onChange={(e) => set("email", e.target.value)}
             error={errors.email}
-          />
-
-          <Input
-            label="Password"
-            type="password"
-            placeholder="Min 8 characters"
-            value={form.password}
-            onChange={(e) => set("password", e.target.value)}
-            error={errors.password}
-          />
-
-          <Input
-            label="Confirm password"
-            type="password"
-            placeholder="Repeat password"
-            value={form.confirmPassword}
-            onChange={(e) => set("confirmPassword", e.target.value)}
-            error={errors.confirmPassword}
           />
 
           <label
@@ -154,6 +149,11 @@ export default function RegisterPage() {
               {errors.submit}
             </div>
           )}
+
+          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", lineHeight: 1.5 }}>
+            Your browser&apos;s SpacetimeDB identity is used to access this account.
+            No app password is stored by CC.
+          </p>
 
           <Button
             type="submit"

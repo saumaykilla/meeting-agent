@@ -4,6 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { clsx } from "clsx";
+import { useAuth } from "@/components/AuthProvider";
+import { useEffect, useState } from "react";
+import { Channel, Company, DmConversation, User } from "@/lib/spacetimedb-types/types";
+import { AddChannelModal } from "@/components/chat/AddChannelModal";
+import { AddDmModal } from "@/components/chat/AddDmModal";
 
 // ---- Icons (inline SVG for zero dependencies) ----
 
@@ -28,14 +33,6 @@ function HashIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
       <path d="M6.5 2.5L5 13.5M11 2.5L9.5 13.5M2.5 6h11M2 10h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DmIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M2 3h12a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 2V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -77,19 +74,6 @@ function PlusIcon() {
   );
 }
 
-// ---- Mock data ---- (will be replaced with SpacetimeDB subscriptions)
-const MOCK_USER = { id: 1, name: "Sarah Johnson", role: "Admin" as const };
-const MOCK_COMPANY = { name: "Acme Corp" };
-const MOCK_CHANNELS = [
-  { id: 1, name: "general" },
-  { id: 2, name: "engineering" },
-  { id: 3, name: "design" },
-];
-const MOCK_DMS = [
-  { id: 1, name: "James Lee", online: true },
-  { id: 2, name: "Maria Chen", online: false },
-];
-
 interface NavItemProps {
   href: string;
   icon: React.ReactNode;
@@ -110,130 +94,262 @@ function NavItem({ href, icon, label, badge }: NavItemProps) {
   );
 }
 
+type ResolvedDm = {
+  dm: DmConversation;
+  otherUser: User | null;
+};
+
 export function Sidebar() {
   const pathname = usePathname();
-  const user = MOCK_USER;
-  const company = MOCK_COMPANY;
+  const { user, db } = useAuth();
+  
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [dms, setDms] = useState<ResolvedDm[]>([]);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [showAddChannel, setShowAddChannel] = useState(false);
+  const [showAddDm, setShowAddDm] = useState(false);
+
+  useEffect(() => {
+    if (!user || !db) return;
+
+    const updateCompany = () => {
+      let foundCompany = null;
+      for (const c of db.db.company.iter()) {
+        if (c.id === user.companyId) {
+          foundCompany = c;
+          break;
+        }
+      }
+      setCompany(foundCompany);
+    };
+
+    updateCompany();
+
+    const updateChannels = () => {
+      const allChannels = Array.from(db.db.channel.iter()).filter(c => c.companyId === user.companyId);
+      setChannels(allChannels);
+    };
+    
+    const updateDms = () => {
+      const allDms = Array.from(db.db.dmConversation.iter()).filter(d => 
+        d.userAId === user.id || d.userBId === user.id
+      );
+      
+      const resolved = allDms.map(dm => {
+        const otherId = dm.userAId === user.id ? dm.userBId : dm.userAId;
+        let otherUser: User | null = null;
+        for (const u of db.db.user.iter()) {
+          if (u.id === otherId) {
+            otherUser = u;
+            break;
+          }
+        }
+        return { dm, otherUser };
+      });
+      setDms(resolved);
+    };
+
+    const updateUnreadCounts = () => {
+      const nextCounts: Record<string, number> = {};
+      for (const message of db.db.message.iter()) {
+        if (message.companyId !== user.companyId || message.senderId === user.id) continue;
+        const key = `${message.channelType}_${message.channelId.toString()}`;
+        const lastSeen = BigInt(localStorage.getItem(`cc_last_seen_${message.channelType}_${message.channelId.toString()}`) || "0");
+        if (message.id > lastSeen) {
+          nextCounts[key] = (nextCounts[key] || 0) + 1;
+        }
+      }
+      setUnreadCounts(nextCounts);
+    };
+
+    updateChannels();
+    updateDms();
+    updateUnreadCounts();
+
+    // Subscribe to changes
+    db.db.channel.onInsert(updateChannels);
+    db.db.channel.onUpdate(updateChannels);
+    db.db.channel.onDelete(updateChannels);
+
+    db.db.company.onInsert(updateCompany);
+    db.db.company.onUpdate(updateCompany);
+    db.db.company.onDelete(updateCompany);
+
+    db.db.dmConversation.onInsert(updateDms);
+    db.db.dmConversation.onUpdate(updateDms);
+    db.db.dmConversation.onDelete(updateDms);
+    
+    db.db.user.onInsert(updateDms);
+    db.db.user.onUpdate(updateDms);
+    db.db.user.onDelete(updateDms);
+
+    db.db.message.onInsert(updateUnreadCounts);
+    db.db.message.onUpdate(updateUnreadCounts);
+    db.db.message.onDelete(updateUnreadCounts);
+    window.addEventListener("cc:read-state-change", updateUnreadCounts);
+
+    return () => {
+      db.db.channel.removeOnInsert(updateChannels);
+      db.db.channel.removeOnUpdate(updateChannels);
+      db.db.channel.removeOnDelete(updateChannels);
+      db.db.company.removeOnInsert(updateCompany);
+      db.db.company.removeOnUpdate(updateCompany);
+      db.db.company.removeOnDelete(updateCompany);
+      db.db.dmConversation.removeOnInsert(updateDms);
+      db.db.dmConversation.removeOnUpdate(updateDms);
+      db.db.dmConversation.removeOnDelete(updateDms);
+      db.db.user.removeOnInsert(updateDms);
+      db.db.user.removeOnUpdate(updateDms);
+      db.db.user.removeOnDelete(updateDms);
+      db.db.message.removeOnInsert(updateUnreadCounts);
+      db.db.message.removeOnUpdate(updateUnreadCounts);
+      db.db.message.removeOnDelete(updateUnreadCounts);
+      window.removeEventListener("cc:read-state-change", updateUnreadCounts);
+    };
+
+  }, [user, db]);
+
+  if (!user || !company) return null;
 
   return (
-    <aside className="sidebar">
-      {/* Brand */}
-      <div className="sidebar-brand">
-        <div className="sidebar-brand-name">CC</div>
-        <div className="sidebar-company">{company.name}</div>
-      </div>
-
-      {/* Nav */}
-      <nav className="sidebar-nav">
-        {/* Primary */}
-        <div className="sidebar-section">
-          <NavItem href="/dashboard" icon={<HomeIcon />} label="Home" />
-          <NavItem href="/meetings" icon={<MeetingsIcon />} label="Meetings" />
-          <NavItem href="/summaries" icon={<SummaryIcon />} label="Summaries" />
+    <>
+      <aside className="sidebar">
+        {/* Brand */}
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-name">CC</div>
+          <div className="sidebar-company">{company.name}</div>
         </div>
 
-        <div className="divider" style={{ margin: "0 16px" }} />
-
-        {/* Channels */}
-        <div className="sidebar-section" style={{ paddingTop: 8 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "4px 16px 4px",
-            }}
-          >
-            <span className="sidebar-section-label" style={{ padding: 0 }}>
-              Channels
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ padding: "2px 4px", borderRadius: "var(--radius-sm)" }}
-              title="Add channel"
-            >
-              <PlusIcon />
-            </button>
+        {/* Nav */}
+        <nav className="sidebar-nav">
+          {/* Primary */}
+          <div className="sidebar-section">
+            <NavItem href="/dashboard" icon={<HomeIcon />} label="Home" />
+            <NavItem href="/meetings" icon={<MeetingsIcon />} label="Meetings" />
+            <NavItem href="/summaries" icon={<SummaryIcon />} label="Summaries" />
           </div>
-          {MOCK_CHANNELS.map((ch) => {
-            const href = `/chat/${ch.id}`;
-            const active = pathname === href;
-            return (
-              <Link
-                key={ch.id}
-                href={href}
-                className={clsx("nav-item", active && "active")}
-              >
-                <HashIcon />
-                <span>{ch.name}</span>
-              </Link>
-            );
-          })}
-        </div>
 
-        <div className="divider" style={{ margin: "0 16px" }} />
+          <div className="divider" style={{ margin: "0 16px" }} />
 
-        {/* Direct Messages */}
-        <div className="sidebar-section" style={{ paddingTop: 8 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "4px 16px 4px",
-            }}
-          >
-            <span className="sidebar-section-label" style={{ padding: 0 }}>
-              Direct Messages
-            </span>
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ padding: "2px 4px", borderRadius: "var(--radius-sm)" }}
-              title="New DM"
+          {/* Channels */}
+          <div className="sidebar-section" style={{ paddingTop: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "4px 16px 4px",
+              }}
             >
-              <PlusIcon />
-            </button>
-          </div>
-          {MOCK_DMS.map((dm) => {
-            const href = `/chat/dm/${dm.id}`;
-            const active = pathname === href;
-            return (
-              <Link
-                key={dm.id}
-                href={href}
-                className={clsx("nav-item", active && "active")}
+              <span className="sidebar-section-label" style={{ padding: 0 }}>
+                Channels
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ padding: "2px 4px", borderRadius: "var(--radius-sm)" }}
+                title="Add channel"
+                onClick={() => setShowAddChannel(true)}
               >
-                <Avatar name={dm.name} size="sm" online={dm.online} />
-                <span style={{ flex: 1 }}>{dm.name}</span>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Admin section */}
-        {user.role === "Admin" && (
-          <>
-            <div className="divider" style={{ margin: "0 16px" }} />
-            <div className="sidebar-section" style={{ paddingTop: 8 }}>
-              <span className="sidebar-section-label">Admin</span>
-              <NavItem href="/admin/employees" icon={<PeopleIcon />} label="People" />
-              <NavItem href="/admin/settings" icon={<SettingsIcon />} label="Company Settings" />
+                <PlusIcon />
+              </button>
             </div>
-          </>
-        )}
-      </nav>
+            {channels.map((ch) => {
+              const href = `/chat/${ch.id}`;
+              const active = pathname === href;
+              return (
+                <Link
+                  key={ch.id.toString()}
+                  href={href}
+                  className={clsx("nav-item", active && "active")}
+                >
+                  <HashIcon />
+                  <span>{ch.name}</span>
+                  {unreadCounts[`Channel_${ch.id.toString()}`] > 0 && (
+                    <span className="nav-badge">{unreadCounts[`Channel_${ch.id.toString()}`]}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
 
-      {/* Footer */}
-      <div className="sidebar-footer">
-        <Avatar name={user.name} size="md" online />
-        <div style={{ flex: 1, overflow: "hidden" }}>
-          <div className="sidebar-footer-name">{user.name}</div>
-          <div className="sidebar-footer-role">{user.role}</div>
+          <div className="divider" style={{ margin: "0 16px" }} />
+
+          {/* Direct Messages */}
+          <div className="sidebar-section" style={{ paddingTop: 8 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "4px 16px 4px",
+              }}
+            >
+              <span className="sidebar-section-label" style={{ padding: 0 }}>
+                Direct Messages
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ padding: "2px 4px", borderRadius: "var(--radius-sm)" }}
+                title="New DM"
+                onClick={() => setShowAddDm(true)}
+              >
+                <PlusIcon />
+              </button>
+            </div>
+            {dms.map(({ dm, otherUser }) => {
+              const otherId = dm.userAId === user.id ? dm.userBId : dm.userAId;
+              const href = `/chat/dm/${otherId}`;
+              const active = pathname === href;
+              const name = otherUser ? otherUser.displayName : "Unknown User";
+              return (
+                <Link
+                  key={dm.id.toString()}
+                  href={href}
+                  className={clsx("nav-item", active && "active")}
+                >
+                  <Avatar name={name} size="sm" online={otherUser?.isActive ?? false} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {name}
+                  </span>
+                  {unreadCounts[`DirectMessage_${dm.id.toString()}`] > 0 && (
+                    <span className="nav-badge">{unreadCounts[`DirectMessage_${dm.id.toString()}`]}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Admin section */}
+          {user.role === "Admin" && (
+            <>
+              <div className="divider" style={{ margin: "0 16px" }} />
+              <div className="sidebar-section" style={{ paddingTop: 8 }}>
+                <span className="sidebar-section-label">Admin</span>
+                <NavItem href="/admin/employees" icon={<PeopleIcon />} label="People" />
+                <NavItem href="/admin/settings" icon={<SettingsIcon />} label="Company Settings" />
+              </div>
+            </>
+          )}
+        </nav>
+
+        {/* Footer */}
+        <div className="sidebar-footer">
+          <Avatar name={user.displayName} size="md" online />
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <div className="sidebar-footer-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user.displayName}
+            </div>
+            <div className="sidebar-footer-role">{user.role}</div>
+          </div>
+          <Link href="/settings/profile" className="btn btn-ghost" style={{ padding: 6 }}>
+            <SettingsIcon />
+          </Link>
         </div>
-        <Link href="/settings/profile" className="btn btn-ghost" style={{ padding: 6 }}>
-          <SettingsIcon />
-        </Link>
-      </div>
-    </aside>
+      </aside>
+
+      {showAddChannel && <AddChannelModal onClose={() => setShowAddChannel(false)} />}
+      {showAddDm && <AddDmModal onClose={() => setShowAddDm(false)} />}
+    </>
   );
 }

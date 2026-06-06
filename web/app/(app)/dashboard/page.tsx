@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge, MeetingStatusBadge } from "@/components/ui/Badge";
+import { MeetingStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 
 // Mock data — will be replaced with SpacetimeDB subscriptions

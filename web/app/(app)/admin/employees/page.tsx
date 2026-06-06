@@ -1,173 +1,271 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge, RoleBadge } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Modal } from "@/components/ui/Modal";
+import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { InviteEmployeeModal } from "@/components/InviteEmployeeModal";
+import { useAuth } from "@/components/AuthProvider";
+import type { Company, User } from "@/lib/spacetimedb-types/types";
 
-const MOCK_EMPLOYEES = [
-  { id: 1, name: "Sarah Johnson", email: "sarah@acme.com", role: "Admin" as const, status: "Active", joinedAt: "Jan 1, 2026" },
-  { id: 2, name: "James Lee", email: "james@acme.com", role: "Employee" as const, status: "Active", joinedAt: "Jan 3, 2026" },
-  { id: 3, name: "Maria Chen", email: "maria@acme.com", role: "Employee" as const, status: "Active", joinedAt: "Jan 5, 2026" },
-  { id: 4, name: "Tom Walker", email: "tom@acme.com", role: "Employee" as const, status: "Active", joinedAt: "Feb 10, 2026" },
-  { id: 5, name: "Alex Rivera", email: "alex@acme.com", role: "Employee" as const, status: "Invited", joinedAt: "—" },
-];
+type ConfirmAction =
+  | { type: "remove"; user: User }
+  | { type: "revoke"; user: User }
+  | null;
 
-export default function EmployeesPage() {
-  const [employees, setEmployees] = useState(MOCK_EMPLOYEES);
-  const [search, setSearch] = useState("");
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteLoading, setInviteLoading] = useState(false);
+function formatDate(value: bigint) {
+  return new Date(Number(value)).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+}
+
+export default function AdminEmployeesPage() {
+  const { user, db } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
+  const [employees, setEmployees] = useState<User[]>([]);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [loadingUserId, setLoadingUserId] = useState<bigint | null>(null);
 
-  const filtered = employees.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    if (!user || !db) return;
 
-  async function handleInvite(ev: React.FormEvent) {
-    ev.preventDefault();
-    if (!inviteEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-      toast("Please enter a valid email address.", "error");
+    if (user.role !== "Admin") {
+      router.push("/dashboard");
       return;
     }
-    setInviteLoading(true);
+
+    const updateEmployees = () => {
+      const allUsers = Array.from(db.db.user.iter())
+        .filter((candidate) => candidate.companyId === user.companyId)
+        .sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
+      setEmployees(allUsers);
+    };
+
+    const updateCompany = () => {
+      setCompany(Array.from(db.db.company.iter()).find((candidate) => candidate.id === user.companyId) || null);
+    };
+
+    updateEmployees();
+    updateCompany();
+
+    db.db.user.onInsert(updateEmployees);
+    db.db.user.onUpdate(updateEmployees);
+    db.db.user.onDelete(updateEmployees);
+    db.db.company.onInsert(updateCompany);
+    db.db.company.onUpdate(updateCompany);
+    db.db.company.onDelete(updateCompany);
+
+    return () => {
+      db.db.user.removeOnInsert(updateEmployees);
+      db.db.user.removeOnUpdate(updateEmployees);
+      db.db.user.removeOnDelete(updateEmployees);
+      db.db.company.removeOnInsert(updateCompany);
+      db.db.company.removeOnUpdate(updateCompany);
+      db.db.company.removeOnDelete(updateCompany);
+    };
+  }, [user, db, router]);
+
+  const stats = useMemo(() => {
+    return {
+      total: employees.length,
+      active: employees.filter((employee) => employee.isActive && !employee.inviteToken).length,
+      pending: employees.filter((employee) => !!employee.inviteToken).length,
+    };
+  }, [employees]);
+
+  async function updateRole(targetUser: User, newRole: string) {
+    if (!db || targetUser.role === newRole) return;
+    setLoadingUserId(targetUser.id);
     try {
-      // TODO: SpacetimeDB invite_employee reducer + Resend email
-      await new Promise((r) => setTimeout(r, 700));
-      setShowInviteModal(false);
-      setInviteEmail("");
-      toast("Invite sent to " + inviteEmail, "success");
+      await db.reducers.updateUserRole({ userId: targetUser.id, newRole });
+      toast("Role updated", "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed to update role", "error");
     } finally {
-      setInviteLoading(false);
+      setLoadingUserId(null);
     }
   }
 
+  async function resendInvite(targetUser: User) {
+    if (!db || !targetUser.inviteToken) return;
+    setLoadingUserId(targetUser.id);
+    const tokenPromise = new Promise<string>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        db.db.user.removeOnUpdate(onUpdate);
+        reject(new Error("Invite token update timed out."));
+      }, 5000);
+
+      const onUpdate = (_ctx: unknown, oldUser: User, newUser: User) => {
+        if (oldUser.id === targetUser.id && newUser.inviteToken && newUser.inviteToken !== oldUser.inviteToken) {
+          window.clearTimeout(timeoutId);
+          db.db.user.removeOnUpdate(onUpdate);
+          resolve(newUser.inviteToken);
+        }
+      };
+
+      db.db.user.onUpdate(onUpdate);
+    });
+
+    try {
+      await db.reducers.regenerateInviteToken({ userId: targetUser.id });
+      const token = await tokenPromise;
+      const response = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: targetUser.email,
+          token,
+          companyName: company?.name || "your company",
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to send invite email.");
+      toast(`Invite resent to ${targetUser.email}`, "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Failed to regenerate invite", "error");
+    } finally {
+      setLoadingUserId(null);
+    }
+  }
+
+  async function runConfirmAction() {
+    if (!db || !confirmAction) return;
+    setLoadingUserId(confirmAction.user.id);
+    try {
+      if (confirmAction.type === "remove") {
+        await db.reducers.removeUser({ userId: confirmAction.user.id });
+        toast("Employee removed", "success");
+      } else {
+        await db.reducers.revokeInvite({ userId: confirmAction.user.id });
+        toast("Invite revoked", "success");
+      }
+      setConfirmAction(null);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Action failed", "error");
+    } finally {
+      setLoadingUserId(null);
+    }
+  }
+
+  if (!user || user.role !== "Admin") return null;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header */}
-      <div className="page-header">
-        <h1 className="page-title" style={{ flex: 1 }}>
-          People
-        </h1>
-        <span style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", marginRight: 12 }}>
-          {employees.filter((e) => e.status === "Active").length} active ·{" "}
-          {employees.filter((e) => e.status === "Invited").length} pending
-        </span>
-        <Button variant="primary" onClick={() => setShowInviteModal(true)}>
-          Invite Employee
-        </Button>
+    <div className="page-container">
+      <div className="page-header" style={{ justifyContent: "space-between" }}>
+        <h1 className="page-title">People</h1>
+        <Button onClick={() => setIsInviteModalOpen(true)}>Invite Employee</Button>
       </div>
 
-      {/* Search */}
-      <div
-        style={{
-          padding: "var(--space-4) var(--space-6)",
-          borderBottom: "1px solid var(--color-border)",
-          background: "var(--color-card)",
-        }}
-      >
-        <Input
-          placeholder="Search by name or email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ maxWidth: 400 }}
-        />
-      </div>
+      <div style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
+          <div className="card">
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Total Employees</div>
+            <div style={{ fontSize: "var(--text-2xl)", fontWeight: 600 }}>{stats.total}</div>
+          </div>
+          <div className="card">
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Active</div>
+            <div style={{ fontSize: "var(--text-2xl)", fontWeight: 600, color: "var(--color-success)" }}>{stats.active}</div>
+          </div>
+          <div className="card">
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Pending Invites</div>
+            <div style={{ fontSize: "var(--text-2xl)", fontWeight: 600, color: "var(--color-warning)" }}>{stats.pending}</div>
+          </div>
+        </div>
 
-      {/* Table */}
-      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-6)" }}>
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Joined</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((emp) => (
-                  <tr key={emp.id}>
-                    <td>
-                      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                        <Avatar name={emp.name} size="md" online={emp.status === "Active"} />
-                        <span style={{ fontWeight: "var(--font-medium)" }}>{emp.name}</span>
-                      </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                <th style={{ padding: "12px 16px", fontWeight: 500 }}>Name</th>
+                <th style={{ padding: "12px 16px", fontWeight: 500 }}>Email</th>
+                <th style={{ padding: "12px 16px", fontWeight: 500 }}>Role</th>
+                <th style={{ padding: "12px 16px", fontWeight: 500 }}>Status</th>
+                <th style={{ padding: "12px 16px", fontWeight: 500 }}>Joined</th>
+                <th style={{ padding: "12px 16px", fontWeight: 500, textAlign: "right" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((employee) => {
+                const isPending = !!employee.inviteToken;
+                const busy = loadingUserId === employee.id;
+                return (
+                  <tr key={employee.id.toString()} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                    <td style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                      <Avatar name={employee.displayName || employee.email} />
+                      <span>{employee.displayName || "Pending setup"}</span>
                     </td>
-                    <td style={{ color: "var(--color-muted)" }}>{emp.email}</td>
-                    <td>
-                      <RoleBadge role={emp.role} />
-                    </td>
-                    <td>
-                      <span
-                        className={`badge ${emp.status === "Active" ? "badge-success" : "badge-warning"}`}
-                      >
-                        {emp.status}
-                      </span>
-                    </td>
-                    <td style={{ color: "var(--color-muted)" }}>{emp.joinedAt}</td>
-                    <td>
-                      {emp.id !== 1 && (
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ color: "var(--color-danger)" }}
-                          onClick={() => {
-                            setEmployees((prev) => prev.filter((e) => e.id !== emp.id));
-                            toast(`${emp.name} removed`, "default");
-                          }}
+                    <td style={{ padding: "12px 16px", color: "var(--color-muted)" }}>{employee.email}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      {isPending ? (
+                        <Badge variant={employee.role === "Admin" ? "accent" : "default"}>{employee.role}</Badge>
+                      ) : (
+                        <select
+                          className="input select"
+                          style={{ width: 130 }}
+                          value={employee.role}
+                          disabled={busy}
+                          onChange={(event) => updateRole(employee, event.target.value)}
                         >
-                          Remove
-                        </button>
+                          <option value="Employee">Employee</option>
+                          <option value="Admin">Admin</option>
+                        </select>
                       )}
                     </td>
+                    <td style={{ padding: "12px 16px" }}>
+                      {isPending ? (
+                        <Badge variant="warning">Pending</Badge>
+                      ) : employee.isActive ? (
+                        <Badge variant="success">Active</Badge>
+                      ) : (
+                        <Badge variant="danger">Removed</Badge>
+                      )}
+                    </td>
+                    <td style={{ padding: "12px 16px", color: "var(--color-muted)" }}>{formatDate(employee.createdAt)}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        {isPending ? (
+                          <>
+                            <Button variant="secondary" size="sm" disabled={busy} onClick={() => resendInvite(employee)}>
+                              Resend
+                            </Button>
+                            <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirmAction({ type: "revoke", user: employee })}>
+                              Revoke
+                            </Button>
+                          </>
+                        ) : employee.isActive ? (
+                          <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirmAction({ type: "remove", user: employee })}>
+                            Remove
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Invite Modal */}
-      <Modal
-        open={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
-        title="Invite Employee"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowInviteModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" form="invite-form" type="submit" loading={inviteLoading}>
-              Send invite
-            </Button>
-          </>
+      <InviteEmployeeModal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} companyId={user.companyId} />
+
+      <ConfirmModal
+        open={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={runConfirmAction}
+        title={confirmAction?.type === "remove" ? `Remove ${confirmAction.user.displayName || confirmAction.user.email}?` : "Revoke invite?"}
+        description={
+          confirmAction?.type === "remove"
+            ? "They will lose access to CC immediately. Their historical messages remain visible."
+            : "This invite link will stop working immediately."
         }
-      >
-        <form id="invite-form" onSubmit={handleInvite}>
-          <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", marginBottom: 16 }}>
-            They&apos;ll receive an email with a link to join your company on CC.
-          </p>
-          <Input
-            label="Work email"
-            type="email"
-            placeholder="colleague@company.com"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            autoFocus
-          />
-        </form>
-      </Modal>
+        confirmLabel={confirmAction?.type === "remove" ? "Remove" : "Revoke"}
+        confirmVariant="danger"
+        loading={!!confirmAction && loadingUserId === confirmAction.user.id}
+      />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Avatar, AvatarGroup } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 
 const MOCK_SUMMARY = {
   id: 1,
@@ -35,7 +34,7 @@ The team collectively agreed to delay the API migration to Q4 in order to unbloc
   recallMeetingDate: "May 29, 2026",
 };
 
-export default function SummaryDetailPage({ params }: { params: { id: string } }) {
+export default function SummaryDetailPage() {
   const s = MOCK_SUMMARY;
 
   return (

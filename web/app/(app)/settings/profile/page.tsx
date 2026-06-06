@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Input, Textarea } from "@/components/ui/Input";
+import { Input } from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
 
 const MOCK_USER = {

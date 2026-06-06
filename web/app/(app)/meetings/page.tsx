@@ -2,11 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Avatar, AvatarGroup } from "@/components/ui/Avatar";
-import { Badge, MeetingStatusBadge } from "@/components/ui/Badge";
+import { AvatarGroup } from "@/components/ui/Avatar";
+import { MeetingStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 
-const MOCK_MEETINGS = [
+type MockParticipant = {
+  id: number;
+  name: string;
+};
+
+type MockMeeting = {
+  id: number;
+  title: string;
+  scheduledAt: string;
+  endedAt: string | null;
+  status: "Active" | "Scheduled" | "Ended";
+  participants: MockParticipant[];
+  createdBy: number;
+  summaryId?: number;
+};
+
+const MOCK_MEETINGS: MockMeeting[] = [
   {
     id: 1,
     title: "Q3 Planning Session",
@@ -62,16 +78,11 @@ const MOCK_MEETINGS = [
 
 type Tab = "upcoming" | "past" | "mine";
 
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function MeetingCard({ meeting }: { meeting: (typeof MOCK_MEETINGS)[0] }) {
+function MeetingCard({ meeting }: { meeting: MockMeeting }) {
   return (
     <div className="card" style={{ display: "flex", alignItems: "center", gap: "var(--space-5)" }}>
       {/* Date block */}
@@ -152,15 +163,13 @@ function MeetingCard({ meeting }: { meeting: (typeof MOCK_MEETINGS)[0] }) {
           </Link>
         )}
         {meeting.status === "Ended" && (
-          <>
-            {(meeting as any).summaryId && (
-              <Link href={`/summaries/${(meeting as any).summaryId}`}>
-                <Button variant="secondary" size="sm">
-                  Summary
-                </Button>
-              </Link>
-            )}
-          </>
+          meeting.summaryId ? (
+            <Link href={`/summaries/${meeting.summaryId}`}>
+              <Button variant="secondary" size="sm">
+                Summary
+              </Button>
+            </Link>
+          ) : null
         )}
       </div>
     </div>
@@ -170,7 +179,6 @@ function MeetingCard({ meeting }: { meeting: (typeof MOCK_MEETINGS)[0] }) {
 export default function MeetingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("upcoming");
 
-  const now = new Date();
   const upcoming = MOCK_MEETINGS.filter(
     (m) => m.status === "Scheduled" || m.status === "Active"
   );

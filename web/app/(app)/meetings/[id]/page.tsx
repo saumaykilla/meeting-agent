@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Avatar, AvatarGroup } from "@/components/ui/Avatar";
-import { Badge, MeetingStatusBadge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
+import { MeetingStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 
 const MOCK_MEETING = {
@@ -37,7 +37,7 @@ function useMeetingTimer(startIso: string) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export default function MeetingLobbyPage({ params }: { params: { id: string } }) {
+export default function MeetingLobbyPage() {
   const router = useRouter();
   const meeting = MOCK_MEETING;
   const timer = useMeetingTimer(meeting.scheduledAt);

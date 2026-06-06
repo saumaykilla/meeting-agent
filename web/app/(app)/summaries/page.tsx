@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { Avatar, AvatarGroup } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
+import { AvatarGroup } from "@/components/ui/Avatar";
 
 const MOCK_SUMMARIES = [
   {
