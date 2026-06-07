@@ -12,15 +12,11 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
-  uuid: __t.string(),
   companyId: __t.u64().name("company_id"),
-  title: __t.string(),
-  description: __t.option(__t.string()),
-  scheduledAt: __t.u64().name("scheduled_at"),
-  startedAt: __t.option(__t.u64()).name("started_at"),
-  endedAt: __t.option(__t.u64()).name("ended_at"),
-  livekitRoomName: __t.string().name("livekit_room_name"),
-  createdBy: __t.u64().name("created_by"),
-  status: __t.string(),
-  agentEnabled: __t.option(__t.bool()).name("agent_enabled"),
+  senderId: __t.u64().name("sender_id"),
+  content: __t.string(),
+  sentAt: __t.u64().name("sent_at"),
+  channelType: __t.string().name("channel_type"),
+  channelId: __t.u64().name("channel_id"),
+  isAgentMessage: __t.bool().name("is_agent_message"),
 });

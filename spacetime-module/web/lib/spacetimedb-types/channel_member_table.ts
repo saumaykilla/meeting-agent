@@ -10,11 +10,8 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  uuid: __t.string(),
-  title: __t.string(),
-  description: __t.option(__t.string()),
-  scheduledAt: __t.u64(),
-  participantIds: __t.array(__t.u64()),
-  agentEnabled: __t.bool(),
-};
+export default __t.row({
+  channelId: __t.u64().name("channel_id"),
+  userId: __t.u64().name("user_id"),
+  joinedAt: __t.u64().name("joined_at"),
+});

@@ -12,15 +12,13 @@ import {
 
 export default __t.row({
   id: __t.u64().primaryKey(),
-  uuid: __t.string(),
+  identity: __t.option(__t.string()),
   companyId: __t.u64().name("company_id"),
-  title: __t.string(),
-  description: __t.option(__t.string()),
-  scheduledAt: __t.u64().name("scheduled_at"),
-  startedAt: __t.option(__t.u64()).name("started_at"),
-  endedAt: __t.option(__t.u64()).name("ended_at"),
-  livekitRoomName: __t.string().name("livekit_room_name"),
-  createdBy: __t.u64().name("created_by"),
-  status: __t.string(),
-  agentEnabled: __t.option(__t.bool()).name("agent_enabled"),
+  email: __t.string(),
+  displayName: __t.string().name("display_name"),
+  role: __t.string(),
+  inviteToken: __t.option(__t.string()).name("invite_token"),
+  mustResetPassword: __t.bool().name("must_reset_password"),
+  isActive: __t.bool().name("is_active"),
+  createdAt: __t.u64().name("created_at"),
 });

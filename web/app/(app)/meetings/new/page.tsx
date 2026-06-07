@@ -98,7 +98,9 @@ export default function NewMeetingPage() {
     setLoading(true);
     try {
       const scheduledAt = BigInt(new Date(`${date}T${time}`).getTime());
+      const meetingUuid = crypto.randomUUID();
       await db.reducers.createMeeting({
+        uuid: meetingUuid,
         title: title.trim(),
         description: description.trim() || undefined,
         scheduledAt,
@@ -106,11 +108,7 @@ export default function NewMeetingPage() {
         agentEnabled,
       });
 
-      const createdMeeting = Array.from(db.db.meeting.iter())
-        .filter((meeting: Meeting) => meeting.createdBy === user.id && meeting.title === title.trim() && meeting.scheduledAt === scheduledAt)
-        .sort((a, b) => Number(b.id) - Number(a.id))[0];
-
-      router.push(createdMeeting ? `/meetings/${createdMeeting.id.toString()}` : "/meetings");
+      router.push(`/meetings/${meetingUuid}`);
     } catch (error) {
       console.error("Failed to schedule meeting", error);
       setErrors({ submit: "Failed to schedule meeting. Please try again." });
@@ -129,7 +127,7 @@ export default function NewMeetingPage() {
         <h1 className="page-title">Schedule Meeting</h1>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-6)", display: "grid", gridTemplateColumns: "1fr 360px", gap: "var(--space-6)", alignItems: "start" }}>
+      <div className="responsive-grid-sidebar page-content">
         <form onSubmit={handleSubmit}>
           <div className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
             <Input label="Meeting title" placeholder="e.g. Q3 Planning Session" value={title} onChange={(e) => setTitle(e.target.value)} error={errors.title} autoFocus />

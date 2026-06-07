@@ -200,6 +200,92 @@ img, video {
 }
 
 /* ============================================================
+   Mobile Topbar & Responsive layout
+   ============================================================ */
+
+.mobile-topbar {
+  display: none;
+  height: var(--header-height);
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
+  align-items: center;
+  padding: 0 var(--space-4);
+  gap: var(--space-4);
+}
+
+.mobile-toggle-btn {
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .responsive-grid-sidebar {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-6);
+  max-width: 980px;
+  margin: 0 auto;
+  width: 100%;
+  padding: var(--space-6);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+    padding: var(--space-4);
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .app-shell {
+    flex-direction: column;
+  }
+  .app-main {
+    height: calc(100vh - var(--header-height));
+  }
+  .mobile-topbar {
+    display: flex;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform var(--transition-base);
+  }
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+  }
+}
+
+/* ============================================================
    Sidebar
    ============================================================ */
 
@@ -207,6 +293,7 @@ img, video {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   height: 100vh;
+  height: 100dvh;
   background: var(--color-card);
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -235,7 +322,7 @@ img, video {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) 0 var(--space-6);
 }
 
 .sidebar-section {
@@ -345,11 +432,12 @@ img, video {
    ============================================================ */
 
 .page-header {
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-6) var(--space-6) var(--space-4);
+  background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-card);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-4);
 }
 
@@ -744,7 +832,7 @@ img, video {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--space-2);
 }
 
 .toggle-label {
@@ -1033,6 +1121,9 @@ img, video {
 .message-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .message-meta {
@@ -1059,11 +1150,40 @@ img, video {
   line-height: 1.55;
   color: var(--color-primary);
   word-break: break-word;
+  max-width: 80%;
+}
+
+.message-own {
+  flex-direction: row-reverse;
+}
+
+.message-own .message-body {
+  align-items: flex-end;
+}
+
+.message-own .message-meta {
+  flex-direction: row-reverse;
+}
+
+.message-own .message-content {
+  background: var(--color-accent);
+  color: white;
+  border-radius: var(--radius-lg) var(--radius-sm) var(--radius-lg) var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+  display: inline-block;
+  text-align: left;
+}
+
+.message-group:not(.message-own):not(.message-agent) .message-content {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+  display: inline-block;
 }
 
 .message-continued {
-  /* Message continuation — hide avatar, align content */
-  padding-left: 44px;
+  /* Handled inline based on ownership */
 }
 
 .message-agent {
@@ -1286,12 +1406,24 @@ img, video {
 }
 
 .meeting-right-panel {
-  width: 300px;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  height: 100vh;
+  width: 340px;
   background: var(--color-card);
+  color: var(--color-primary);
   border-left: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  z-index: 1000;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.meeting-right-panel.open {
+  transform: translateX(0);
 }
 
 .meeting-toolbar {
@@ -1525,11 +1657,13 @@ img, video {
 .meeting-room-main {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
 }
 
 .meeting-video-area {
+  flex: 1;
   position: relative;
   min-height: 0;
   padding: 8px;
@@ -1609,6 +1743,7 @@ img, video {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  z-index: 10;
 }
 
 .meeting-participant-muted {
@@ -1648,13 +1783,10 @@ img, video {
   font-weight: var(--font-bold);
 }
 
-.meeting-right-panel {
-  min-height: 0;
-  background: var(--color-card);
-  color: var(--color-primary);
-  border-left: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
+@media (max-width: 800px) {
+  .meeting-right-panel {
+    width: 100%;
+  }
 }
 
 .meeting-panel-tabs {

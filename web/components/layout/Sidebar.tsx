@@ -79,14 +79,15 @@ interface NavItemProps {
   icon: React.ReactNode;
   label: string;
   badge?: number;
+  onClick?: () => void;
 }
 
-function NavItem({ href, icon, label, badge }: NavItemProps) {
+function NavItem({ href, icon, label, badge, onClick }: NavItemProps) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <Link href={href} className={clsx("nav-item", active && "active")}>
+    <Link href={href} className={clsx("nav-item", active && "active")} onClick={onClick}>
       {icon}
       <span>{label}</span>
       {badge && badge > 0 && <span className="nav-badge">{badge}</span>}
@@ -99,9 +100,9 @@ type ResolvedDm = {
   otherUser: User | null;
 };
 
-export function Sidebar() {
+export function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
-  const { user, db } = useAuth();
+  const { user, db, logout } = useAuth();
   
   const [channels, setChannels] = useState<Channel[]>([]);
   const [dms, setDms] = useState<ResolvedDm[]>([]);
@@ -225,9 +226,9 @@ export function Sidebar() {
         <nav className="sidebar-nav">
           {/* Primary */}
           <div className="sidebar-section">
-            <NavItem href="/dashboard" icon={<HomeIcon />} label="Home" />
-            <NavItem href="/meetings" icon={<MeetingsIcon />} label="Meetings" />
-            <NavItem href="/summaries" icon={<SummaryIcon />} label="Summaries" />
+            <NavItem href="/dashboard" icon={<HomeIcon />} label="Home" onClick={onClose} />
+            <NavItem href="/meetings" icon={<MeetingsIcon />} label="Meetings" onClick={onClose} />
+            <NavItem href="/summaries" icon={<SummaryIcon />} label="Summaries" onClick={onClose} />
           </div>
 
           <div className="divider" style={{ margin: "0 16px" }} />
@@ -262,6 +263,7 @@ export function Sidebar() {
                   key={ch.id.toString()}
                   href={href}
                   className={clsx("nav-item", active && "active")}
+                  onClick={onClose}
                 >
                   <HashIcon />
                   <span>{ch.name}</span>
@@ -307,6 +309,7 @@ export function Sidebar() {
                   key={dm.id.toString()}
                   href={href}
                   className={clsx("nav-item", active && "active")}
+                  onClick={onClose}
                 >
                   <Avatar name={name} size="sm" online={otherUser?.isActive ?? false} />
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -326,8 +329,8 @@ export function Sidebar() {
               <div className="divider" style={{ margin: "0 16px" }} />
               <div className="sidebar-section" style={{ paddingTop: 8 }}>
                 <span className="sidebar-section-label">Admin</span>
-                <NavItem href="/admin/employees" icon={<PeopleIcon />} label="People" />
-                <NavItem href="/admin/settings" icon={<SettingsIcon />} label="Company Settings" />
+                <NavItem href="/admin/employees" icon={<PeopleIcon />} label="People" onClick={onClose} />
+                <NavItem href="/admin/settings" icon={<SettingsIcon />} label="Company Settings" onClick={onClose} />
               </div>
             </>
           )}
@@ -342,9 +345,12 @@ export function Sidebar() {
             </div>
             <div className="sidebar-footer-role">{user.role}</div>
           </div>
-          <Link href="/settings/profile" className="btn btn-ghost" style={{ padding: 6 }}>
+          <Link href="/settings/profile" className="btn btn-ghost" style={{ padding: 6 }} onClick={onClose}>
             <SettingsIcon />
           </Link>
+          <button className="btn btn-ghost text-danger" style={{ padding: 6 }} onClick={() => { onClose?.(); logout(); }} title="Sign Out">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
         </div>
       </aside>
 

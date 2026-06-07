@@ -49,6 +49,7 @@ const spacetimedb = schema({
     { public: true },
     {
       id: t.u64().primaryKey().autoInc(),
+      uuid: t.string(),
       companyId: t.u64(),
       title: t.string(),
       description: t.option(t.string()),
@@ -484,13 +485,14 @@ export const acceptInvite = spacetimedb.reducer(
 // Create meeting
 export const createMeeting = spacetimedb.reducer(
   {
+    uuid: t.string(),
     title: t.string(),
     description: t.option(t.string()),
     scheduledAt: t.u64(),
     participantIds: t.array(t.u64()),
     agentEnabled: t.bool(),
   },
-  (ctx: ReducerCtx<S>, { title, description, scheduledAt, participantIds, agentEnabled }) => {
+  (ctx: ReducerCtx<S>, { uuid, title, description, scheduledAt, participantIds, agentEnabled }) => {
     const user = requireActiveUser(ctx);
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
@@ -500,6 +502,7 @@ export const createMeeting = spacetimedb.reducer(
     // We insert a blank room name first, then update it with the ID.
     const meeting = ctx.db.meeting.insert({
       id: 0n,
+      uuid,
       companyId: user.companyId,
       title: trimmedTitle,
       description: description?.trim() || undefined,

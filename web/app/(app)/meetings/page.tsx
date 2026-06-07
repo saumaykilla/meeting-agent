@@ -27,7 +27,7 @@ function MeetingCard({
   onCancel: (meeting: Meeting) => void;
 }) {
   return (
-    <div className="card" style={{ display: "flex", alignItems: "center", gap: "var(--space-5)" }}>
+    <div className="card" style={{ display: "flex", alignItems: "center", gap: "var(--space-5)", flexWrap: "wrap" }}>
       <div
         style={{
           width: 52,
@@ -53,7 +53,7 @@ function MeetingCard({
           <MeetingStatusBadge status={meeting.status as "Scheduled" | "Active" | "Ended"} />
           {meeting.agentEnabled !== false && <span className="badge badge-agent">CC</span>}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", fontSize: "var(--text-sm)", color: "var(--color-muted)", flexWrap: "wrap" }}>
           <span>{formatMeetingTime(meeting.scheduledAt)}</span>
           <AvatarGroup users={participants.map((p) => ({ id: Number(p.id), name: p.displayName || p.email }))} size="sm" max={4} />
           <span>{participants.length} participants</span>
@@ -62,13 +62,13 @@ function MeetingCard({
 
       <div style={{ display: "flex", gap: "var(--space-2)", flexShrink: 0 }}>
         {meeting.status === "Active" && (
-          <Link href={`/meetings/${meeting.id.toString()}/room`}>
+          <Link href={`/meetings/${meeting.uuid}/room`}>
             <Button variant="accent" size="sm">Join Now</Button>
           </Link>
         )}
         {meeting.status === "Scheduled" && (
           <>
-            <Link href={`/meetings/${meeting.id.toString()}`}>
+            <Link href={`/meetings/${meeting.uuid}`}>
               <Button variant="secondary" size="sm">View</Button>
             </Link>
             <Button variant="danger" size="sm" onClick={() => onCancel(meeting)}>

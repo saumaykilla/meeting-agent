@@ -27,11 +27,11 @@ function useLiveElapsed(meeting?: Meeting) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export default function MeetingLobbyPage(props: { params: Promise<{ id: string }> }) {
+export default function MeetingLobbyPage(props: { params: Promise<{ uuid: string }> }) {
   const params = use(props.params);
   const router = useRouter();
   const { user, db } = useAuth();
-  const meetingId = BigInt(params.id);
+  const meetingUuid = params.uuid;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [meeting, setMeeting] = useState<Meeting | undefined>();
   const [participants, setParticipants] = useState<MeetingParticipant[]>([]);
@@ -46,16 +46,19 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
   useEffect(() => {
     if (!db || !user) return;
     const refresh = () => {
-      const currentMeeting = db.db.meeting.id.find(meetingId);
+      const currentMeeting = Array.from(db.db.meeting.iter()).find((m: Meeting) => m.uuid === meetingUuid);
       setMeeting(currentMeeting && currentMeeting.companyId === user.companyId ? currentMeeting : undefined);
-      setParticipants(Array.from(db.db.meetingParticipant.iter()).filter((participant) => participant.meetingId === meetingId));
-      setUsers(Array.from(db.db.user.iter()).filter((teamUser) => teamUser.companyId === user.companyId));
-      setMessages(
-        Array.from(db.db.message.iter())
-          .filter((message) => message.channelType === "MeetingThread" && message.channelId === meetingId)
-          .sort((a, b) => Number(a.sentAt) - Number(b.sentAt))
-      );
-      setSummary(Array.from(db.db.meetingSummary.iter()).find((item) => item.meetingId === meetingId && item.companyId === user.companyId));
+      const mId = currentMeeting?.id;
+      if (mId !== undefined) {
+        setParticipants(Array.from(db.db.meetingParticipant.iter()).filter((participant) => participant.meetingId === mId));
+        setUsers(Array.from(db.db.user.iter()).filter((teamUser) => teamUser.companyId === user.companyId));
+        setMessages(
+          Array.from(db.db.message.iter())
+            .filter((message) => message.channelType === "MeetingThread" && message.channelId === mId)
+            .sort((a, b) => Number(a.sentAt) - Number(b.sentAt))
+        );
+        setSummary(Array.from(db.db.meetingSummary.iter()).find((item) => item.meetingId === mId && item.companyId === user.companyId));
+      }
     };
 
     refresh();
@@ -92,7 +95,7 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
       db.db.meetingSummary.removeOnUpdate(refresh);
       db.db.meetingSummary.removeOnDelete(refresh);
     };
-  }, [db, meetingId, user]);
+  }, [db, meetingUuid, user]);
 
   useEffect(() => {
     const savedMic = localStorage.getItem("cc_mic_enabled");
@@ -147,7 +150,7 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
     return () => stream?.getTracks().forEach((track) => track.stop());
   }, [stream]);
 
-  const participantUsers = useMemo(() => meetingParticipants(meetingId, participants, users), [meetingId, participants, users]);
+  const participantUsers = useMemo(() => meeting ? meetingParticipants(meeting.id, participants, users) : [], [meeting, participants, users]);
   const host = users.find((teamUser) => teamUser.id === meeting?.createdBy);
   const userMap = useMemo(() => new Map(users.map((teamUser) => [teamUser.id, teamUser])), [users]);
 
@@ -156,12 +159,12 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
     if (meeting.status === "Scheduled") {
       await db.reducers.startMeeting({ meetingId: meeting.id });
     }
-    router.push(`/meetings/${meeting.id.toString()}/room`);
+    router.push(`/meetings/${meetingUuid}/room`);
   }
 
   async function sendThreadMessage(content: string) {
-    if (!db) return;
-    await db.reducers.sendMessage({ content, channelType: "MeetingThread", channelId: meetingId });
+    if (!db || !meeting) return;
+    await db.reducers.sendMessage({ content, channelType: "MeetingThread", channelId: meeting.id });
   }
 
   if (!meeting || !user) {
@@ -184,7 +187,7 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
         <MeetingStatusBadge status={meeting.status as "Scheduled" | "Active" | "Ended"} />
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-8)", display: "grid", gridTemplateColumns: "minmax(0, 680px) 360px", gap: "var(--space-6)", justifyContent: "center", alignItems: "start" }}>
+      <div className="responsive-grid-sidebar page-content">
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
           <div className="card card-accent">
             <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-4)", marginBottom: 16 }}>
@@ -204,7 +207,7 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
               </div>
             </div>
 
-            <div style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", background: "#111", aspectRatio: "16 / 9", marginBottom: 16, display: "grid", placeItems: "center" }}>
+            <div style={{ position: "relative", borderRadius: "var(--radius-lg)", overflow: "hidden", background: "#111", aspectRatio: "16 / 9", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {stream && cameraEnabled ? (
                 <video ref={videoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
@@ -213,36 +216,27 @@ export default function MeetingLobbyPage(props: { params: Promise<{ id: string }
                   <p style={{ marginTop: 12 }}>Camera preview off</p>
                 </div>
               )}
-            </div>
 
-            <div className="meeting-lobby-controls">
-              <button
-                type="button"
-                className={`meeting-media-btn ${micEnabled ? "" : "off"}`}
-                onClick={() => setMicEnabled((value) => !value)}
-                aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
-                title={micEnabled ? "Microphone on" : "Microphone off"}
-              >
-                {micEnabled ? <MicIcon /> : <MicDisabledIcon />}
-              </button>
-              <button
-                type="button"
-                className={`meeting-media-btn ${cameraEnabled ? "" : "off"}`}
-                onClick={() => setCameraEnabled((value) => !value)}
-                aria-label={cameraEnabled ? "Turn camera off" : "Turn camera on"}
-                title={cameraEnabled ? "Camera on" : "Camera off"}
-              >
-                {cameraEnabled ? <CameraIcon /> : <CameraDisabledIcon />}
-              </button>
-              <button
-                type="button"
-                className="meeting-media-btn"
-                disabled
-                aria-label="Screen share"
-                title="Screen share"
-              >
-                <ScreenShareIcon />
-              </button>
+              <div className="meeting-lobby-controls" style={{ position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, background: "rgba(0,0,0,0.5)", padding: 8, borderRadius: 24, backdropFilter: "blur(8px)" }}>
+                <button
+                  type="button"
+                  className={`meeting-media-btn ${micEnabled ? "" : "off"}`}
+                  onClick={() => setMicEnabled((value) => !value)}
+                  aria-label={micEnabled ? "Turn microphone off" : "Turn microphone on"}
+                  title={micEnabled ? "Microphone on" : "Microphone off"}
+                >
+                  {micEnabled ? <MicIcon /> : <MicDisabledIcon />}
+                </button>
+                <button
+                  type="button"
+                  className={`meeting-media-btn ${cameraEnabled ? "" : "off"}`}
+                  onClick={() => setCameraEnabled((value) => !value)}
+                  aria-label={cameraEnabled ? "Turn camera off" : "Turn camera on"}
+                  title={cameraEnabled ? "Camera on" : "Camera off"}
+                >
+                  {cameraEnabled ? <CameraIcon /> : <CameraDisabledIcon />}
+                </button>
+              </div>
             </div>
 
             <div style={{ marginBottom: 16 }}>

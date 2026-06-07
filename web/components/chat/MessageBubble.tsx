@@ -30,7 +30,7 @@ export function MessageBubble({ message, sender, showAvatar, isOwn }: MessageBub
     <div
       className={`message-group ${isOwn ? "message-own" : ""} ${!showAvatar ? "message-continued" : ""}`}
       data-own={isOwn}
-      style={{ paddingLeft: !showAvatar ? 44 : 0 }}
+      style={!showAvatar ? (isOwn ? { paddingRight: 44 } : { paddingLeft: 44 }) : undefined}
     >
       {showAvatar && (
         <div className="message-avatar-col">
@@ -39,9 +39,10 @@ export function MessageBubble({ message, sender, showAvatar, isOwn }: MessageBub
       )}
       <div className="message-body">
         {showAvatar && (
-          <div className="message-meta">
+          <div className="message-meta" style={isOwn ? { justifyContent: "flex-end", width: "100%" } : undefined}>
+            {isOwn && <span className="message-timestamp" style={{ marginRight: 8 }}>{formatTime(message.sentAt)}</span>}
             <span className="message-sender">{senderName}</span>
-            <span className="message-timestamp">{formatTime(message.sentAt)}</span>
+            {!isOwn && <span className="message-timestamp" style={{ marginLeft: 8 }}>{formatTime(message.sentAt)}</span>}
           </div>
         )}
         <div

@@ -144,8 +144,8 @@ export default function AdminEmployeesPage() {
         <Button onClick={() => setIsInviteModalOpen(true)}>Invite Employee</Button>
       </div>
 
-      <div style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
+      <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+        <div className="stats-grid">
           <div className="card">
             <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Total Employees</div>
             <div style={{ fontSize: "var(--text-2xl)", fontWeight: 600 }}>{stats.total}</div>

@@ -116,7 +116,7 @@ export default function DashboardPage() {
         <Link href="/meetings/new"><Button variant="primary">Schedule Meeting</Button></Link>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-6)", display: "grid", gridTemplateColumns: "1fr 320px", gap: "var(--space-6)", alignItems: "start" }}>
+      <div className="responsive-grid-sidebar page-content">
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
           <section>
             <div className="section-header">
@@ -131,7 +131,7 @@ export default function DashboardPage() {
                   const meetingUsers = meetingParticipants(meeting.id, participants, users);
                   return (
                     <div key={meeting.id.toString()} className="card card-sm">
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-4)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-4)", flexWrap: "wrap" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 6 }}>
                             <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>{meeting.title}</span>
@@ -149,7 +149,7 @@ export default function DashboardPage() {
                             <span style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>{meetingUsers.length} participants</span>
                           </div>
                         </div>
-                        <Link href={meeting.status === "Active" ? `/meetings/${meeting.id.toString()}/room` : `/meetings/${meeting.id.toString()}`}>
+                        <Link href={meeting.status === "Active" ? `/meetings/${meeting.uuid}/room` : `/meetings/${meeting.uuid}`}>
                           <Button variant={meeting.status === "Active" ? "accent" : "secondary"} size="sm">
                             {meeting.status === "Active" ? "Join Now" : "View"}
                           </Button>

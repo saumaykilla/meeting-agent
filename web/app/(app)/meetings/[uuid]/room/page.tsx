@@ -50,10 +50,6 @@ function MeetingTopBar({ meeting, onEnd }: { meeting: Meeting; onEnd: () => void
       {meeting.agentEnabled !== false && (
         <div className="meeting-room-agent-pill"><span /> CC is listening</div>
       )}
-      <Button variant="danger" size="sm" onClick={onEnd}>
-        <LeaveIcon aria-hidden="true" />
-        End meeting
-      </Button>
     </div>
   );
 }
@@ -106,24 +102,31 @@ function MeetingParticipantTile() {
 }
 
 function VideoGrid() {
-  const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true },
-      { source: Track.Source.ScreenShare, withPlaceholder: false },
-    ],
-    { onlySubscribed: false }
-  );
+  const screenShareTracks = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }]);
+  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
   const participants = useParticipants();
   const hasAgent = participants.some((participant) => participant.identity.startsWith("cc-agent-"));
 
+  if (screenShareTracks.length > 0) {
+    return (
+      <div className="meeting-video-area">
+        <div className="meeting-video-grid" data-count={1} style={{ display: "block", width: "100%", height: "100%" }}>
+          <TrackLoop tracks={screenShareTracks}>
+            <MeetingParticipantTile />
+          </TrackLoop>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="meeting-video-area">
-      <div className="meeting-video-grid" data-count={tracks.length}>
-        <TrackLoop tracks={tracks}>
+      <div className="meeting-video-grid" data-count={cameraTracks.length}>
+        <TrackLoop tracks={cameraTracks}>
           <MeetingParticipantTile />
         </TrackLoop>
       </div>
-      {meetingHasAgentTilePlaceholder(tracks.length, hasAgent) && <AgentTile />}
+      {meetingHasAgentTilePlaceholder(cameraTracks.length, hasAgent) && <AgentTile />}
     </div>
   );
 }
@@ -132,15 +135,15 @@ function meetingHasAgentTilePlaceholder(trackCount: number, hasAgent: boolean) {
   return hasAgent && trackCount === 0;
 }
 
-function MeetingControls({ onLeave }: { onLeave: () => void }) {
+function MeetingControls({ onLeave, onTogglePanel }: { onLeave: () => void, onTogglePanel: () => void }) {
   const room = useRoomContext();
   return (
     <div className="meeting-room-toolbar">
       <TrackToggle source={Track.Source.Microphone} className="meeting-control-btn" aria-label="Toggle microphone" title="Microphone" />
       <TrackToggle source={Track.Source.Camera} className="meeting-control-btn" aria-label="Toggle camera" title="Camera" />
       <TrackToggle source={Track.Source.ScreenShare} className="meeting-control-btn" aria-label="Share screen" title="Share screen" />
-      <button type="button" className="meeting-control-btn" onClick={() => room.localParticipant.publishData(new TextEncoder().encode("👏"))}>
-        React
+      <button type="button" className="meeting-control-btn" onClick={onTogglePanel} aria-label="Toggle chat" title="Toggle chat">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg>
       </button>
       <button type="button" className="meeting-control-btn danger" onClick={onLeave} aria-label="Leave meeting" title="Leave meeting">
         <LeaveIcon aria-hidden="true" />
@@ -155,12 +158,16 @@ function MeetingRightPanel({
   currentUser,
   messages,
   onSendMessage,
+  isOpen,
+  onClose,
 }: {
   meetingId: bigint;
   users: Map<bigint, User>;
   currentUser: User;
   messages: Message[];
   onSendMessage: (content: string) => void;
+  isOpen: boolean;
+  onClose: () => void;
 }) {
   const [tab, setTab] = useState<"chat" | "participants">("chat");
   const participants = useParticipants();
@@ -179,10 +186,13 @@ function MeetingRightPanel({
   };
 
   return (
-    <div className="meeting-right-panel">
-      <div className="meeting-panel-tabs">
+    <div className={`meeting-right-panel ${isOpen ? "open" : ""}`}>
+      <div className="meeting-panel-tabs" style={{ display: "flex", alignItems: "center" }}>
         <button className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>Chat</button>
         <button className={tab === "participants" ? "active" : ""} onClick={() => setTab("participants")}>Participants</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--color-muted)", padding: "0 16px", cursor: "pointer" }} aria-label="Close panel">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       {tab === "chat" ? (
         <>
@@ -225,24 +235,36 @@ function ConnectedMeetingRoom({
   onSendMessage: (content: string) => void;
   onEnd: () => void;
 }) {
+  const [showPanel, setShowPanel] = useState(false);
+  const screenShareTracks = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }]);
+  const isScreenSharing = screenShareTracks.length > 0;
+
   return (
     <div className="meeting-room">
       <MeetingTopBar meeting={meeting} onEnd={onEnd} />
       <div className="meeting-room-main">
         <VideoGrid />
-        <MeetingRightPanel meetingId={meeting.id} users={users} currentUser={currentUser} messages={messages} onSendMessage={onSendMessage} />
+        <MeetingRightPanel 
+          meetingId={meeting.id} 
+          users={users} 
+          currentUser={currentUser} 
+          messages={messages} 
+          onSendMessage={onSendMessage} 
+          isOpen={showPanel && !isScreenSharing}
+          onClose={() => setShowPanel(false)}
+        />
       </div>
-      <MeetingControls onLeave={onEnd} />
+      <MeetingControls onLeave={onEnd} onTogglePanel={() => setShowPanel(p => !p)} />
       <RoomAudioRenderer />
     </div>
   );
 }
 
-export default function MeetingRoomPage(props: { params: Promise<{ id: string }> }) {
+export default function MeetingRoomPage(props: { params: Promise<{ uuid: string }> }) {
   const params = use(props.params);
   const router = useRouter();
   const { user, db } = useAuth();
-  const meetingId = BigInt(params.id);
+  const meetingUuid = params.uuid;
   const [meeting, setMeeting] = useState<Meeting | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -261,14 +283,18 @@ export default function MeetingRoomPage(props: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!db || !user) return;
     const refresh = () => {
-      const currentMeeting = db.db.meeting.id.find(meetingId);
+      const currentMeeting = Array.from(db.db.meeting.iter()).find((m: Meeting) => m.uuid === meetingUuid);
       setMeeting(currentMeeting && currentMeeting.companyId === user.companyId ? currentMeeting : undefined);
-      setUsers(Array.from(db.db.user.iter()).filter((teamUser) => teamUser.companyId === user.companyId));
-      setMessages(
-        Array.from(db.db.message.iter())
-          .filter((message) => message.channelType === "MeetingThread" && message.channelId === meetingId)
-          .sort((a, b) => Number(a.sentAt) - Number(b.sentAt))
-      );
+      
+      const mId = currentMeeting?.id;
+      if (mId !== undefined) {
+        setUsers(Array.from(db.db.user.iter()).filter((teamUser) => teamUser.companyId === user.companyId));
+        setMessages(
+          Array.from(db.db.message.iter())
+            .filter((message) => message.channelType === "MeetingThread" && message.channelId === mId)
+            .sort((a, b) => Number(a.sentAt) - Number(b.sentAt))
+        );
+      }
     };
     refresh();
     db.db.meeting.onInsert(refresh);
@@ -291,7 +317,7 @@ export default function MeetingRoomPage(props: { params: Promise<{ id: string }>
       db.db.user.removeOnUpdate(refresh);
       db.db.user.removeOnDelete(refresh);
     };
-  }, [db, meetingId, user]);
+  }, [db, meetingUuid, user]);
 
   useEffect(() => {
     if (!db || !meeting || !user) return;
@@ -328,17 +354,17 @@ export default function MeetingRoomPage(props: { params: Promise<{ id: string }>
   const userMap = useMemo(() => new Map(users.map((teamUser) => [teamUser.id, teamUser])), [users]);
 
   async function sendMeetingMessage(content: string) {
-    if (!db) return;
-    await db.reducers.sendMessage({ content, channelType: "MeetingThread", channelId: meetingId });
+    if (!db || !meeting) return;
+    await db.reducers.sendMessage({ content, channelType: "MeetingThread", channelId: meeting.id });
   }
 
   async function leaveMeeting({ end }: { end: boolean }) {
     if (hasNavigatedAfterDisconnect.current) return;
     hasNavigatedAfterDisconnect.current = true;
     if (end && db && meeting?.status === "Active") {
-      await db.reducers.endMeeting({ meetingId });
+      await db.reducers.endMeeting({ meetingId: meeting.id });
     }
-    router.replace(`/meetings/${meetingId.toString()}`);
+    router.replace(`/dashboard`);
   }
 
   if (!user || !meeting) {
@@ -351,7 +377,7 @@ export default function MeetingRoomPage(props: { params: Promise<{ id: string }>
         <div className="card" style={{ maxWidth: 520 }}>
           <h1 style={{ marginBottom: 8 }}>LiveKit is not ready</h1>
           <p style={{ color: "var(--color-muted)", marginBottom: 16 }}>{tokenError}</p>
-          <Button variant="secondary" onClick={() => router.replace(`/meetings/${meetingId.toString()}`)}>Back to lobby</Button>
+          <Button variant="secondary" onClick={() => router.replace(`/dashboard`)}>Back to dashboard</Button>
         </div>
       </div>
     );
