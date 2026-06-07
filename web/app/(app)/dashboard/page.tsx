@@ -1,329 +1,223 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { MeetingStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/components/AuthProvider";
+import type { Meeting, MeetingParticipant, MeetingSummary, Message, User } from "@/lib/spacetimedb-types/types";
+import { formatMeetingDate, formatMeetingTime, meetingParticipants } from "@/lib/meeting-utils";
 
-// Mock data — will be replaced with SpacetimeDB subscriptions
-const MOCK_MEETINGS = [
-  {
-    id: 1,
-    title: "Q3 Planning Session",
-    scheduledAt: "2026-06-06T14:00:00Z",
-    status: "Active" as const,
-    participants: [
-      { id: 1, name: "Sarah Johnson" },
-      { id: 2, name: "James Lee" },
-      { id: 3, name: "Maria Chen" },
-    ],
-  },
-  {
-    id: 2,
-    title: "Product Roadmap Review",
-    scheduledAt: "2026-06-06T16:00:00Z",
-    status: "Scheduled" as const,
-    participants: [
-      { id: 1, name: "Sarah Johnson" },
-      { id: 4, name: "Tom Walker" },
-    ],
-  },
-  {
-    id: 3,
-    title: "Design Sync",
-    scheduledAt: "2026-06-06T17:30:00Z",
-    status: "Scheduled" as const,
-    participants: [
-      { id: 3, name: "Maria Chen" },
-      { id: 5, name: "Alex Rivera" },
-    ],
-  },
-];
-
-const MOCK_SUMMARIES = [
-  {
-    id: 1,
-    meetingTitle: "Engineering Standup",
-    date: "Jun 5, 2026",
-    duration: 28,
-    preview: "The team agreed to prioritize the auth refactor before the July release. Backend tasks assigned to James and Tom.",
-  },
-  {
-    id: 2,
-    meetingTitle: "Investor Prep",
-    date: "Jun 4, 2026",
-    duration: 45,
-    preview: "Slide deck reviewed. Key metrics to highlight: 40% MoM growth, NPS 72. Demo walkthrough rehearsed.",
-  },
-];
-
-const MOCK_ACTIVITY = [
-  { id: 1, text: "James Lee posted in #engineering", time: "5m ago" },
-  { id: 2, text: "CC Assistant summarized Engineering Standup", time: "1h ago", agent: true },
-  { id: 3, text: "Tom Walker joined the company", time: "3h ago" },
-  { id: 4, text: "Maria Chen scheduled Design Sync", time: "4h ago" },
-];
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 export default function DashboardPage() {
+  const { user, db } = useAuth();
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [participants, setParticipants] = useState<MeetingParticipant[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [summaries, setSummaries] = useState<MeetingSummary[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    if (!db || !user) return;
+
+    const refresh = () => {
+      setMeetings(Array.from(db.db.meeting.iter()).filter((meeting) => meeting.companyId === user.companyId));
+      setParticipants(Array.from(db.db.meetingParticipant.iter()));
+      setUsers(Array.from(db.db.user.iter()).filter((teamUser) => teamUser.companyId === user.companyId));
+      setSummaries(Array.from(db.db.meetingSummary.iter()).filter((summary) => summary.companyId === user.companyId));
+      setMessages(Array.from(db.db.message.iter()).filter((message) => message.companyId === user.companyId));
+    };
+
+    refresh();
+    db.db.meeting.onInsert(refresh);
+    db.db.meeting.onUpdate(refresh);
+    db.db.meeting.onDelete(refresh);
+    db.db.meetingParticipant.onInsert(refresh);
+    db.db.meetingParticipant.onUpdate(refresh);
+    db.db.meetingParticipant.onDelete(refresh);
+    db.db.meetingSummary.onInsert(refresh);
+    db.db.meetingSummary.onUpdate(refresh);
+    db.db.meetingSummary.onDelete(refresh);
+    db.db.message.onInsert(refresh);
+    db.db.message.onUpdate(refresh);
+    db.db.message.onDelete(refresh);
+    db.db.user.onInsert(refresh);
+    db.db.user.onUpdate(refresh);
+    db.db.user.onDelete(refresh);
+
+    return () => {
+      db.db.meeting.removeOnInsert(refresh);
+      db.db.meeting.removeOnUpdate(refresh);
+      db.db.meeting.removeOnDelete(refresh);
+      db.db.meetingParticipant.removeOnInsert(refresh);
+      db.db.meetingParticipant.removeOnUpdate(refresh);
+      db.db.meetingParticipant.removeOnDelete(refresh);
+      db.db.meetingSummary.removeOnInsert(refresh);
+      db.db.meetingSummary.removeOnUpdate(refresh);
+      db.db.meetingSummary.removeOnDelete(refresh);
+      db.db.message.removeOnInsert(refresh);
+      db.db.message.removeOnUpdate(refresh);
+      db.db.message.removeOnDelete(refresh);
+      db.db.user.removeOnInsert(refresh);
+      db.db.user.removeOnUpdate(refresh);
+      db.db.user.removeOnDelete(refresh);
+    };
+  }, [db, user]);
+
+  const todayMeetings = useMemo(() => {
+    const today = new Date().toDateString();
+    return meetings
+      .filter((meeting) => new Date(Number(meeting.scheduledAt)).toDateString() === today && meeting.status !== "Ended")
+      .sort((a, b) => Number(a.scheduledAt) - Number(b.scheduledAt));
+  }, [meetings]);
+
+  const recentSummaries = useMemo(
+    () => summaries.sort((a, b) => Number(b.generatedAt) - Number(a.generatedAt)).slice(0, 3),
+    [summaries]
+  );
+
+  const recentActivity = useMemo(
+    () =>
+      messages
+        .sort((a, b) => Number(b.sentAt) - Number(a.sentAt))
+        .slice(0, 5)
+        .map((message) => {
+          const sender = users.find((teamUser) => teamUser.id === message.senderId);
+          return {
+            id: message.id.toString(),
+            text: message.isAgentMessage
+              ? "CC Assistant posted an update"
+              : `${sender?.displayName || sender?.email || "Someone"} posted a message`,
+            agent: message.isAgentMessage,
+            time: new Date(Number(message.sentAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+        }),
+    [messages, users]
+  );
+
+  if (!user) return null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header */}
       <div className="page-header">
         <div style={{ flex: 1 }}>
-          <h1 className="page-title">Good morning, Sarah 👋</h1>
+          <h1 className="page-title">{greeting()}, {user.displayName || user.email} 👋</h1>
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", marginTop: 2 }}>
-            Friday, June 6, 2026
+            {new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
           </p>
         </div>
-        <Link href="/meetings/new">
-          <Button variant="primary">Schedule Meeting</Button>
-        </Link>
+        <Link href="/meetings/new"><Button variant="primary">Schedule Meeting</Button></Link>
       </div>
 
-      {/* Content */}
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          padding: "var(--space-6)",
-          display: "grid",
-          gridTemplateColumns: "1fr 320px",
-          gap: "var(--space-6)",
-          alignItems: "start",
-        }}
-      >
-        {/* Left column */}
+      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-6)", display: "grid", gridTemplateColumns: "1fr 320px", gap: "var(--space-6)", alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-          {/* Today's Meetings */}
           <section>
             <div className="section-header">
               <h2 className="section-title">Today&apos;s Meetings</h2>
-              <Link href="/meetings" className="inline-link" style={{ fontSize: "var(--text-sm)" }}>
-                View all →
-              </Link>
+              <Link href="/meetings" className="inline-link" style={{ fontSize: "var(--text-sm)" }}>View all →</Link>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              {MOCK_MEETINGS.map((meeting) => (
-                <div key={meeting.id} className="card card-sm">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "var(--space-4)",
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-2)",
-                          marginBottom: 6,
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "var(--text-md)",
-                            fontWeight: "var(--font-semibold)",
-                          }}
-                        >
-                          {meeting.title}
-                        </span>
-                        <MeetingStatusBadge status={meeting.status} />
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-3)",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "var(--text-sm)",
-                            color: "var(--color-muted)",
-                          }}
-                        >
-                          {formatTime(meeting.scheduledAt)}
-                        </span>
-                        <div style={{ display: "flex", gap: -4 }}>
-                          {meeting.participants.slice(0, 4).map((p, i) => (
-                            <div key={p.id} style={{ marginLeft: i > 0 ? -6 : 0 }}>
-                              <Avatar name={p.name} size="sm" />
+              {todayMeetings.length === 0 ? (
+                <div className="card card-sm" style={{ color: "var(--color-muted)" }}>No meetings today.</div>
+              ) : (
+                todayMeetings.map((meeting) => {
+                  const meetingUsers = meetingParticipants(meeting.id, participants, users);
+                  return (
+                    <div key={meeting.id.toString()} className="card card-sm">
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-4)" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 6 }}>
+                            <span style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>{meeting.title}</span>
+                            <MeetingStatusBadge status={meeting.status as "Scheduled" | "Active" | "Ended"} />
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                            <span style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>{formatMeetingTime(meeting.scheduledAt)}</span>
+                            <div style={{ display: "flex" }}>
+                              {meetingUsers.slice(0, 4).map((participant, index) => (
+                                <div key={participant.id.toString()} style={{ marginLeft: index > 0 ? -6 : 0 }}>
+                                  <Avatar name={participant.displayName || participant.email} size="sm" />
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>{meetingUsers.length} participants</span>
+                          </div>
                         </div>
-                        <span
-                          style={{
-                            fontSize: "var(--text-xs)",
-                            color: "var(--color-muted)",
-                          }}
-                        >
-                          {meeting.participants.length} participants
-                        </span>
+                        <Link href={meeting.status === "Active" ? `/meetings/${meeting.id.toString()}/room` : `/meetings/${meeting.id.toString()}`}>
+                          <Button variant={meeting.status === "Active" ? "accent" : "secondary"} size="sm">
+                            {meeting.status === "Active" ? "Join Now" : "View"}
+                          </Button>
+                        </Link>
                       </div>
                     </div>
-                    <Link href={`/meetings/${meeting.id}`}>
-                      <Button
-                        variant={meeting.status === "Active" ? "accent" : "secondary"}
-                        size="sm"
-                      >
-                        {meeting.status === "Active" ? "Join Now" : "View"}
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           </section>
 
-          {/* Recent Summaries */}
           <section>
             <div className="section-header">
               <h2 className="section-title">Recent Summaries</h2>
-              <Link href="/summaries" className="inline-link" style={{ fontSize: "var(--text-sm)" }}>
-                View all →
-              </Link>
+              <Link href="/summaries" className="inline-link" style={{ fontSize: "var(--text-sm)" }}>View all →</Link>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              {MOCK_SUMMARIES.map((s) => (
-                <Link key={s.id} href={`/summaries/${s.id}`} style={{ display: "block" }}>
-                  <div
-                    className="card card-accent card-sm"
-                    style={{
-                      cursor: "pointer",
-                      transition: "box-shadow var(--transition-fast)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: 6,
-                      }}
-                    >
-                      <span style={{ fontWeight: "var(--font-semibold)", fontSize: "var(--text-sm)" }}>
-                        {s.meetingTitle}
-                      </span>
-                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
-                        {s.date} · {s.duration}m
-                      </span>
+              {recentSummaries.length === 0 ? (
+                <div className="card card-sm" style={{ color: "var(--color-muted)" }}>No summaries yet.</div>
+              ) : (
+                recentSummaries.map((summary) => (
+                  <Link key={summary.id.toString()} href={`/summaries/${summary.id.toString()}`} style={{ display: "block" }}>
+                    <div className="card card-accent card-sm" style={{ cursor: "pointer", transition: "box-shadow var(--transition-fast)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontWeight: "var(--font-semibold)", fontSize: "var(--text-sm)" }}>Meeting #{summary.meetingId.toString()}</span>
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>{formatMeetingDate(summary.generatedAt)}</span>
+                      </div>
+                      <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", lineHeight: 1.55, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                        {summary.summaryText}
+                      </p>
                     </div>
-                    <p
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        color: "var(--color-muted)",
-                        lineHeight: 1.55,
-                        overflow: "hidden",
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                      }}
-                    >
-                      {s.preview}
-                    </p>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))
+              )}
             </div>
           </section>
         </div>
 
-        {/* Right column */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-          {/* CC Assistant Memory Card */}
           <div className="card-agent">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-2)",
-                marginBottom: 10,
-              }}
-            >
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 10 }}>
               <Avatar name="CC" isAgent size="sm" />
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: "var(--font-semibold)",
-                  color: "var(--color-agent-text)",
-                }}
-              >
-                CC Assistant Memory
-              </span>
+              <span style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-semibold)", color: "var(--color-agent-text)" }}>CC Assistant Memory</span>
             </div>
-            <p
-              style={{
-                fontSize: "var(--text-sm)",
-                color: "var(--color-muted)",
-                lineHeight: 1.55,
-                marginBottom: 12,
-              }}
-            >
-              CC has indexed <strong style={{ color: "var(--color-primary)" }}>12 meetings</strong>{" "}
-              in your company&apos;s knowledge base. It will alert your team when topics are repeated.
+            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", lineHeight: 1.55, marginBottom: 12 }}>
+              CC has indexed <strong style={{ color: "var(--color-primary)" }}>{summaries.filter((summary) => summary.pineconeIndexed).length} meetings</strong>{" "}
+              in your company&apos;s knowledge base.
             </p>
-            <Link href="/summaries" className="inline-link" style={{ fontSize: "var(--text-sm)" }}>
-              Browse all summaries →
-            </Link>
+            <Link href="/summaries" className="inline-link" style={{ fontSize: "var(--text-sm)" }}>Browse all summaries →</Link>
           </div>
 
-          {/* Activity Feed */}
           <div className="card card-sm">
-            <h3
-              style={{
-                fontSize: "var(--text-sm)",
-                fontWeight: "var(--font-semibold)",
-                marginBottom: 12,
-              }}
-            >
-              Team Activity
-            </h3>
+            <h3 style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-semibold)", marginBottom: 12 }}>Team Activity</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              {MOCK_ACTIVITY.map((item) => (
-                <div
-                  key={item.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    justifyContent: "space-between",
-                    gap: "var(--space-2)",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "var(--text-sm)",
-                      color: item.agent ? "var(--color-agent-text)" : "var(--color-primary)",
-                      lineHeight: 1.4,
-                      flex: 1,
-                    }}
-                  >
-                    {item.agent && (
-                      <span
-                        style={{
-                          fontWeight: "var(--font-semibold)",
-                        }}
-                      >
-                        ◉{" "}
-                      </span>
-                    )}
-                    {item.text}
-                  </p>
-                  <span
-                    style={{
-                      fontSize: "var(--text-xs)",
-                      color: "var(--color-muted)",
-                      whiteSpace: "nowrap",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.time}
-                  </span>
-                </div>
-              ))}
+              {recentActivity.length === 0 ? (
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>No activity yet.</p>
+              ) : (
+                recentActivity.map((item) => (
+                  <div key={item.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--space-2)" }}>
+                    <p style={{ fontSize: "var(--text-sm)", color: item.agent ? "var(--color-agent-text)" : "var(--color-primary)", lineHeight: 1.4, flex: 1 }}>
+                      {item.agent && <span style={{ fontWeight: "var(--font-semibold)" }}>◉ </span>}
+                      {item.text}
+                    </p>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", whiteSpace: "nowrap", flexShrink: 0 }}>{item.time}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

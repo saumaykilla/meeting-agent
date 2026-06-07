@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+.env.local
+.venv/
+.env
+dist/
+.DS_Store
+
+.windsurfrules

@@ -9,12 +9,14 @@ pip install --upgrade pip
 
 pip install \
   "livekit-agents[google]>=0.8.0" \
+  "livekit-plugins-google>=0.6.0" \
   "livekit-plugins-silero>=0.6.0" \
   "pinecone-client>=3.0.0" \
   "google-generativeai>=0.7.0" \
   "google-cloud-speech>=2.26.0" \
   "google-cloud-texttospeech>=2.16.0" \
   "python-dotenv>=1.0.0" \
+  "spacetimedb-sdk>=0.8.0" \
   "aiohttp>=3.9.0" \
   "asyncio>=3.4.3"
 

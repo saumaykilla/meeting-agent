@@ -21,4 +21,5 @@ export default __t.row({
   livekitRoomName: __t.string().name("livekit_room_name"),
   createdBy: __t.u64().name("created_by"),
   status: __t.string(),
+  agentEnabled: __t.option(__t.bool()).name("agent_enabled"),
 });

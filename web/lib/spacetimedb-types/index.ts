@@ -35,11 +35,13 @@ import {
 
 // Import all reducer arg schemas
 import AcceptInviteReducer from "./accept_invite_reducer";
+import CancelMeetingReducer from "./cancel_meeting_reducer";
 import CreateChannelReducer from "./create_channel_reducer";
 import CreateInviteReducer from "./create_invite_reducer";
 import CreateMeetingReducer from "./create_meeting_reducer";
 import EndMeetingReducer from "./end_meeting_reducer";
 import JoinChannelReducer from "./join_channel_reducer";
+import LeaveCompanyReducer from "./leave_company_reducer";
 import LogoutReducer from "./logout_reducer";
 import MarkSummaryIndexedReducer from "./mark_summary_indexed_reducer";
 import OpenDmReducer from "./open_dm_reducer";
@@ -53,6 +55,8 @@ import StartMeetingReducer from "./start_meeting_reducer";
 import StoreMeetingSummaryReducer from "./store_meeting_summary_reducer";
 import UpdateCompanyNameReducer from "./update_company_name_reducer";
 import UpdateCompanySettingsReducer from "./update_company_settings_reducer";
+import UpdatePasswordReducer from "./update_password_reducer";
+import UpdateUserProfileReducer from "./update_user_profile_reducer";
 import UpdateUserRoleReducer from "./update_user_role_reducer";
 
 // Import all procedure arg schemas
@@ -180,11 +184,13 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("accept_invite", AcceptInviteReducer),
+  __reducerSchema("cancel_meeting", CancelMeetingReducer),
   __reducerSchema("create_channel", CreateChannelReducer),
   __reducerSchema("create_invite", CreateInviteReducer),
   __reducerSchema("create_meeting", CreateMeetingReducer),
   __reducerSchema("end_meeting", EndMeetingReducer),
   __reducerSchema("join_channel", JoinChannelReducer),
+  __reducerSchema("leave_company", LeaveCompanyReducer),
   __reducerSchema("logout", LogoutReducer),
   __reducerSchema("mark_summary_indexed", MarkSummaryIndexedReducer),
   __reducerSchema("open_dm", OpenDmReducer),
@@ -198,6 +204,8 @@ const reducersSchema = __reducers(
   __reducerSchema("store_meeting_summary", StoreMeetingSummaryReducer),
   __reducerSchema("update_company_name", UpdateCompanyNameReducer),
   __reducerSchema("update_company_settings", UpdateCompanySettingsReducer),
+  __reducerSchema("update_password", UpdatePasswordReducer),
+  __reducerSchema("update_user_profile", UpdateUserProfileReducer),
   __reducerSchema("update_user_role", UpdateUserRoleReducer),
 );
 

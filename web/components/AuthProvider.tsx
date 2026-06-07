@@ -61,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             for (const u of connection.db.user.iter()) {
               if (u.identity === identHex) {
                 setUser(u);
+                localStorage.setItem(`cc_token_${u.email.toLowerCase()}`, tok);
                 break;
               }
             }
@@ -87,12 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (identityRef.current && u.identity === identityRef.current) {
             console.log("User inserted:", u);
             setUser(u);
+            localStorage.setItem(`cc_token_${u.email.toLowerCase()}`, tok);
           }
         });
 
         connection.db.user.onUpdate((_ctx, _oldU, newU) => {
           if (identityRef.current && newU.identity === identityRef.current) {
             setUser(newU);
+            localStorage.setItem(`cc_token_${newU.email.toLowerCase()}`, tok);
           }
         });
 

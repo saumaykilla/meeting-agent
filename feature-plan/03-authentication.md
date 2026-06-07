@@ -9,11 +9,11 @@
 ## Goal
 
 Implement the full authentication flow for CC:
-1. **Admin registers** — creates company account + first admin user
-2. **Login** — email + password login for both admins and employees
-3. **Employee invite** — admin creates an invite, employee receives email link, sets up their password
+1. **Admin registers** — creates company account + first admin user using their SpacetimeDB identity.
+2. **Login** — checks the user's SpacetimeDB browser identity and automatically signs them in.
+3. **Employee invite** — admin creates an invite, employee receives email link, sets up their account, linking it to their SpacetimeDB identity.
 
-All auth state is managed via SpacetimeDB's built-in auth + a client-side session stored in `localStorage`.
+All auth state is managed via SpacetimeDB's built-in Identity and Token system + a client-side session stored in `localStorage`.
 
 ---
 
@@ -37,17 +37,15 @@ Components:
   - CompanyName input
   - AdminFullName input
   - WorkEmail input
-  - Password input
-  - ConfirmPassword input
   - Terms checkbox
   - Submit button → calls SpacetimeDB register_company reducer
   - Link to /login
 ```
 
 **On submit:**
-1. Hash password client-side (bcrypt via `bcryptjs`)
-2. Call `register_company(company_name, admin_name, email, password_hash)` reducer
-3. SpacetimeDB returns session — store in localStorage as `cc_session`
+1. Call `register_company(company_name, admin_name, email)` reducer (uses sender identity)
+2. SpacetimeDB links identity, returns state
+3. Redirect to `/dashboard`
 4. Redirect to `/dashboard`
 
 ---
@@ -57,19 +55,14 @@ Components:
 ```
 Components:
 - LoginForm
-  - Email input
-  - Password input (with show/hide toggle)
-  - Remember me checkbox
-  - Forgot password link (non-functional in MVP — show toast)
-  - Submit button → calls SpacetimeDB login reducer
+  - Message checking identity session
+  - "Start new SpacetimeDB session" button (to clear tokens if no account is found)
   - Link to /register
 ```
 
 **On submit:**
-1. Hash password client-side
-2. Call `login(email, password_hash)` reducer
-3. On success: store session + redirect to `/dashboard`
-4. On fail: show inline error 'Invalid email or password'
+1. Call `logout()` (which clears `spacetimedb_token` from `localStorage`)
+2. Reloads page to generate new token
 
 ---
 
@@ -81,8 +74,6 @@ Components:
   - Company invite banner (read from token metadata)
   - FullName input
   - Email input (read-only, pre-filled from token)
-  - Password input
-  - ConfirmPassword input
   - Submit button → calls accept_invite reducer
 ```
 
@@ -93,10 +84,9 @@ Components:
 4. Show company name in invite banner
 
 **On submit:**
-1. Hash password
-2. Call `accept_invite(token, display_name, password_hash)` reducer
-3. Token is invalidated server-side (set to `None` in users table)
-4. Session returned → redirect to `/dashboard`
+1. Call `accept_invite(token, display_name)` reducer
+2. Token is invalidated server-side (set to `None` in users table)
+3. Session automatically updates state via `user` table insert → redirect to `/dashboard`
 
 ---
 
@@ -181,9 +171,8 @@ export async function POST(req: Request) {
 
 ## Tasks
 
-- [ ] Install `bcryptjs` + `@types/bcryptjs` in `web/`
-- [ ] Build `RegisterForm` component — validation (email format, password match, terms checked)
-- [ ] Build `LoginForm` component — password show/hide, error state
+- [ ] Build `RegisterForm` component — validation (email format, terms checked)
+- [ ] Build `LoginForm` component — session check
 - [ ] Build `SetupForm` component — token parsing, read-only email, invite banner
 - [ ] Implement `useAuth` hook with SpacetimeDB session subscription
 - [ ] Implement `getSession` / `setSession` / `clearSession` in `lib/auth.ts`
@@ -202,6 +191,4 @@ export async function POST(req: Request) {
 | Company Name | Required, 2–100 chars |
 | Display Name | Required, 2–60 chars |
 | Email | Valid email format, unique within company |
-| Password | Min 8 chars, at least 1 uppercase, 1 number |
-| Confirm Password | Must match Password |
 | Invite Token | Must exist + not yet used |

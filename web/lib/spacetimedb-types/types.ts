@@ -65,6 +65,7 @@ export const Meeting = __t.object("Meeting", {
   livekitRoomName: __t.string(),
   createdBy: __t.u64(),
   status: __t.string(),
+  agentEnabled: __t.option(__t.bool()),
 });
 export type Meeting = __Infer<typeof Meeting>;
 

@@ -1,91 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 import { AvatarGroup } from "@/components/ui/Avatar";
 import { MeetingStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-
-type MockParticipant = {
-  id: number;
-  name: string;
-};
-
-type MockMeeting = {
-  id: number;
-  title: string;
-  scheduledAt: string;
-  endedAt: string | null;
-  status: "Active" | "Scheduled" | "Ended";
-  participants: MockParticipant[];
-  createdBy: number;
-  summaryId?: number;
-};
-
-const MOCK_MEETINGS: MockMeeting[] = [
-  {
-    id: 1,
-    title: "Q3 Planning Session",
-    scheduledAt: "2026-06-06T14:00:00Z",
-    endedAt: null,
-    status: "Active" as const,
-    participants: [
-      { id: 1, name: "Sarah Johnson" },
-      { id: 2, name: "James Lee" },
-      { id: 3, name: "Maria Chen" },
-    ],
-    createdBy: 1,
-  },
-  {
-    id: 2,
-    title: "Product Roadmap Review",
-    scheduledAt: "2026-06-06T16:00:00Z",
-    endedAt: null,
-    status: "Scheduled" as const,
-    participants: [
-      { id: 1, name: "Sarah Johnson" },
-      { id: 4, name: "Tom Walker" },
-    ],
-    createdBy: 1,
-  },
-  {
-    id: 3,
-    title: "Design Sync",
-    scheduledAt: "2026-06-07T10:00:00Z",
-    endedAt: null,
-    status: "Scheduled" as const,
-    participants: [
-      { id: 3, name: "Maria Chen" },
-      { id: 5, name: "Alex Rivera" },
-    ],
-    createdBy: 3,
-  },
-  {
-    id: 4,
-    title: "Engineering Standup",
-    scheduledAt: "2026-06-05T09:00:00Z",
-    endedAt: "2026-06-05T09:28:00Z",
-    status: "Ended" as const,
-    participants: [
-      { id: 1, name: "Sarah Johnson" },
-      { id: 2, name: "James Lee" },
-      { id: 4, name: "Tom Walker" },
-    ],
-    summaryId: 1,
-    createdBy: 1,
-  },
-];
+import type { Meeting, MeetingParticipant, MeetingSummary, User } from "@/lib/spacetimedb-types/types";
+import {
+  formatMeetingTime,
+  latestSummaryForMeeting,
+  meetingParticipants,
+} from "@/lib/meeting-utils";
 
 type Tab = "upcoming" | "past" | "mine";
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function MeetingCard({ meeting }: { meeting: MockMeeting }) {
+function MeetingCard({
+  meeting,
+  participants,
+  summary,
+  onCancel,
+}: {
+  meeting: Meeting;
+  participants: User[];
+  summary?: MeetingSummary;
+  onCancel: (meeting: Meeting) => void;
+}) {
   return (
     <div className="card" style={{ display: "flex", alignItems: "center", gap: "var(--space-5)" }}>
-      {/* Date block */}
       <div
         style={{
           width: 52,
@@ -95,81 +37,49 @@ function MeetingCard({ meeting }: { meeting: MockMeeting }) {
           paddingRight: "var(--space-4)",
         }}
       >
-        <div
-          style={{
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--font-semibold)",
-            color: "var(--color-muted)",
-            textTransform: "uppercase",
-          }}
-        >
-          {new Date(meeting.scheduledAt).toLocaleDateString([], { month: "short" })}
+        <div style={{ fontSize: "var(--text-xs)", fontWeight: "var(--font-semibold)", color: "var(--color-muted)", textTransform: "uppercase" }}>
+          {new Date(Number(meeting.scheduledAt)).toLocaleDateString([], { month: "short" })}
         </div>
-        <div
-          style={{
-            fontSize: "var(--text-2xl)",
-            fontWeight: "var(--font-bold)",
-            lineHeight: 1.2,
-          }}
-        >
-          {new Date(meeting.scheduledAt).getDate()}
+        <div style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--font-bold)", lineHeight: 1.2 }}>
+          {new Date(Number(meeting.scheduledAt)).getDate()}
         </div>
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            marginBottom: 4,
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 4 }}>
           <h3 style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>
             {meeting.title}
           </h3>
-          <MeetingStatusBadge status={meeting.status} />
+          <MeetingStatusBadge status={meeting.status as "Scheduled" | "Active" | "Ended"} />
+          {meeting.agentEnabled !== false && <span className="badge badge-agent">CC</span>}
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-4)",
-            fontSize: "var(--text-sm)",
-            color: "var(--color-muted)",
-          }}
-        >
-          <span>{formatTime(meeting.scheduledAt)}</span>
-          <AvatarGroup users={meeting.participants} size="sm" max={4} />
-          <span>{meeting.participants.length} participants</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
+          <span>{formatMeetingTime(meeting.scheduledAt)}</span>
+          <AvatarGroup users={participants.map((p) => ({ id: Number(p.id), name: p.displayName || p.email }))} size="sm" max={4} />
+          <span>{participants.length} participants</span>
         </div>
       </div>
 
-      {/* Actions */}
       <div style={{ display: "flex", gap: "var(--space-2)", flexShrink: 0 }}>
         {meeting.status === "Active" && (
-          <Link href={`/meetings/${meeting.id}/room`}>
-            <Button variant="accent" size="sm">
-              Join Now
-            </Button>
+          <Link href={`/meetings/${meeting.id.toString()}/room`}>
+            <Button variant="accent" size="sm">Join Now</Button>
           </Link>
         )}
         {meeting.status === "Scheduled" && (
-          <Link href={`/meetings/${meeting.id}`}>
-            <Button variant="secondary" size="sm">
-              View
-            </Button>
-          </Link>
-        )}
-        {meeting.status === "Ended" && (
-          meeting.summaryId ? (
-            <Link href={`/summaries/${meeting.summaryId}`}>
-              <Button variant="secondary" size="sm">
-                Summary
-              </Button>
+          <>
+            <Link href={`/meetings/${meeting.id.toString()}`}>
+              <Button variant="secondary" size="sm">View</Button>
             </Link>
-          ) : null
+            <Button variant="danger" size="sm" onClick={() => onCancel(meeting)}>
+              Cancel
+            </Button>
+          </>
+        )}
+        {meeting.status === "Ended" && summary && (
+          <Link href={`/summaries/${summary.id.toString()}`}>
+            <Button variant="secondary" size="sm">Summary</Button>
+          </Link>
         )}
       </div>
     </div>
@@ -177,41 +87,87 @@ function MeetingCard({ meeting }: { meeting: MockMeeting }) {
 }
 
 export default function MeetingsPage() {
+  const { user, db } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("upcoming");
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [participants, setParticipants] = useState<MeetingParticipant[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [summaries, setSummaries] = useState<MeetingSummary[]>([]);
 
-  const upcoming = MOCK_MEETINGS.filter(
-    (m) => m.status === "Scheduled" || m.status === "Active"
-  );
-  const past = MOCK_MEETINGS.filter((m) => m.status === "Ended");
-  const mine = MOCK_MEETINGS.filter((m) =>
-    m.participants.some((p) => p.id === 1)
-  );
+  useEffect(() => {
+    if (!db || !user) return;
 
-  const displayed =
-    activeTab === "upcoming" ? upcoming : activeTab === "past" ? past : mine;
+    const refresh = () => {
+      setMeetings(
+        Array.from(db.db.meeting.iter())
+          .filter((meeting) => meeting.companyId === user.companyId)
+          .sort((a, b) => Number(a.scheduledAt) - Number(b.scheduledAt))
+      );
+      setParticipants(Array.from(db.db.meetingParticipant.iter()));
+      setUsers(Array.from(db.db.user.iter()).filter((teamUser) => teamUser.companyId === user.companyId));
+      setSummaries(Array.from(db.db.meetingSummary.iter()).filter((summary) => summary.companyId === user.companyId));
+    };
+
+    refresh();
+    db.db.meeting.onInsert(refresh);
+    db.db.meeting.onUpdate(refresh);
+    db.db.meeting.onDelete(refresh);
+    db.db.meetingParticipant.onInsert(refresh);
+    db.db.meetingParticipant.onUpdate(refresh);
+    db.db.meetingParticipant.onDelete(refresh);
+    db.db.meetingSummary.onInsert(refresh);
+    db.db.meetingSummary.onUpdate(refresh);
+    db.db.meetingSummary.onDelete(refresh);
+    db.db.user.onInsert(refresh);
+    db.db.user.onUpdate(refresh);
+    db.db.user.onDelete(refresh);
+
+    return () => {
+      db.db.meeting.removeOnInsert(refresh);
+      db.db.meeting.removeOnUpdate(refresh);
+      db.db.meeting.removeOnDelete(refresh);
+      db.db.meetingParticipant.removeOnInsert(refresh);
+      db.db.meetingParticipant.removeOnUpdate(refresh);
+      db.db.meetingParticipant.removeOnDelete(refresh);
+      db.db.meetingSummary.removeOnInsert(refresh);
+      db.db.meetingSummary.removeOnUpdate(refresh);
+      db.db.meetingSummary.removeOnDelete(refresh);
+      db.db.user.removeOnInsert(refresh);
+      db.db.user.removeOnUpdate(refresh);
+      db.db.user.removeOnDelete(refresh);
+    };
+  }, [db, user]);
+
+  const displayed = useMemo(() => {
+    if (!user) return [];
+    if (activeTab === "past") return meetings.filter((meeting) => meeting.status === "Ended");
+    if (activeTab === "mine") {
+      const myMeetingIds = new Set(
+        participants
+          .filter((participant) => participant.userId === user.id)
+          .map((participant) => participant.meetingId)
+      );
+      return meetings.filter((meeting) => myMeetingIds.has(meeting.id));
+    }
+    return meetings.filter((meeting) => meeting.status === "Scheduled" || meeting.status === "Active");
+  }, [activeTab, meetings, participants, user]);
+
+  async function cancelMeeting(meeting: Meeting) {
+    if (!db) return;
+    if (!window.confirm(`Cancel "${meeting.title}"?`)) return;
+    await db.reducers.cancelMeeting({ meetingId: meeting.id });
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header */}
       <div className="page-header">
-        <h1 className="page-title" style={{ flex: 1 }}>
-          Meetings
-        </h1>
+        <h1 className="page-title" style={{ flex: 1 }}>Meetings</h1>
         <Link href="/meetings/new">
           <Button variant="primary">Schedule Meeting</Button>
         </Link>
       </div>
 
-      {/* Tabs */}
-      <div
-        style={{
-          padding: "0 var(--space-6)",
-          borderBottom: "1px solid var(--color-border)",
-          background: "var(--color-card)",
-          display: "flex",
-          gap: "var(--space-1)",
-        }}
-      >
+      <div style={{ padding: "0 var(--space-6)", borderBottom: "1px solid var(--color-border)", background: "var(--color-card)", display: "flex", gap: "var(--space-1)" }}>
         {(["upcoming", "past", "mine"] as Tab[]).map((tab) => (
           <button
             key={tab}
@@ -233,25 +189,13 @@ export default function MeetingsPage() {
         ))}
       </div>
 
-      {/* List */}
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          padding: "var(--space-6)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "var(--space-3)",
-        }}
-      >
+      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
         {displayed.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">📅</div>
             <h3 className="empty-state-title">No meetings here</h3>
             <p className="empty-state-body">
-              {activeTab === "upcoming"
-                ? "No upcoming meetings. Schedule one to get started."
-                : "No past meetings found."}
+              {activeTab === "upcoming" ? "No upcoming meetings. Schedule one to get started." : "No meetings found."}
             </p>
             {activeTab === "upcoming" && (
               <Link href="/meetings/new" style={{ marginTop: 8 }}>
@@ -260,7 +204,15 @@ export default function MeetingsPage() {
             )}
           </div>
         ) : (
-          displayed.map((m) => <MeetingCard key={m.id} meeting={m} />)
+          displayed.map((meeting) => (
+            <MeetingCard
+              key={meeting.id.toString()}
+              meeting={meeting}
+              participants={meetingParticipants(meeting.id, participants, users)}
+              summary={latestSummaryForMeeting(meeting.id, summaries)}
+              onCancel={cancelMeeting}
+            />
+          ))
         )}
       </div>
     </div>

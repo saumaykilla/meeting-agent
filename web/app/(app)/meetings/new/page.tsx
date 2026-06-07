@@ -1,19 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Avatar } from "@/components/ui/Avatar";
-
-const MOCK_USERS = [
-  { id: 1, name: "Sarah Johnson" },
-  { id: 2, name: "James Lee" },
-  { id: 3, name: "Maria Chen" },
-  { id: 4, name: "Tom Walker" },
-  { id: 5, name: "Alex Rivera" },
-];
-const CURRENT_USER_ID = 1;
+import { useAuth } from "@/components/AuthProvider";
+import type { CompanySetting, Meeting, User } from "@/lib/spacetimedb-types/types";
 
 const DURATIONS = [
   { label: "30 min", value: 30 },
@@ -25,195 +18,173 @@ const DURATIONS = [
 
 export default function NewMeetingPage() {
   const router = useRouter();
+  const { user, db } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState(60);
-  const [participantIds, setParticipantIds] = useState<number[]>([CURRENT_USER_ID]);
+  const [participantIds, setParticipantIds] = useState<bigint[]>([]);
   const [agentEnabled, setAgentEnabled] = useState(true);
+  const [team, setTeam] = useState<User[]>([]);
   const [search, setSearch] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  const unselectedUsers = MOCK_USERS.filter(
-    (u) => !participantIds.includes(u.id) &&
-    u.name.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    if (!db || !user) return;
+
+    const refresh = () => {
+      const companyUsers = Array.from(db.db.user.iter())
+        .filter((teamUser) => teamUser.companyId === user.companyId && teamUser.isActive)
+        .sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email));
+      setTeam(companyUsers);
+      setParticipantIds((prev) => (prev.includes(user.id) ? prev : [user.id, ...prev]));
+
+      const setting = Array.from(db.db.companySetting.iter()).find(
+        (candidate: CompanySetting) => candidate.companyId === user.companyId
+      );
+      if (setting) setAgentEnabled(setting.agentAutoJoin);
+    };
+
+    refresh();
+    db.db.user.onInsert(refresh);
+    db.db.user.onUpdate(refresh);
+    db.db.user.onDelete(refresh);
+    db.db.companySetting.onInsert(refresh);
+    db.db.companySetting.onUpdate(refresh);
+    db.db.companySetting.onDelete(refresh);
+
+    return () => {
+      db.db.user.removeOnInsert(refresh);
+      db.db.user.removeOnUpdate(refresh);
+      db.db.user.removeOnDelete(refresh);
+      db.db.companySetting.removeOnInsert(refresh);
+      db.db.companySetting.removeOnUpdate(refresh);
+      db.db.companySetting.removeOnDelete(refresh);
+    };
+  }, [db, user]);
+
+  const unselectedUsers = useMemo(
+    () =>
+      team.filter(
+        (teamUser) =>
+          !participantIds.includes(teamUser.id) &&
+          `${teamUser.displayName} ${teamUser.email}`.toLowerCase().includes(search.toLowerCase())
+      ),
+    [participantIds, search, team]
   );
 
-  function toggleUser(id: number) {
-    if (id === CURRENT_USER_ID) return; // can't remove self
-    setParticipantIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+  function toggleUser(id: bigint) {
+    if (id === user?.id) return;
+    setParticipantIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   function validate() {
-    const e: Record<string, string> = {};
-    if (!title.trim()) e.title = "Meeting title is required.";
-    if (!date) e.date = "Date is required.";
-    if (!time) e.time = "Time is required.";
-    if (participantIds.length < 1) e.participants = "Add at least one participant.";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const nextErrors: Record<string, string> = {};
+    const scheduledAt = date && time ? new Date(`${date}T${time}`) : null;
+    if (!title.trim()) nextErrors.title = "Meeting title is required.";
+    if (!date) nextErrors.date = "Date is required.";
+    if (!time) nextErrors.time = "Time is required.";
+    if (scheduledAt && Number.isNaN(scheduledAt.getTime())) nextErrors.time = "Choose a valid date and time.";
+    if (participantIds.length < 1) nextErrors.participants = "Add at least one participant.";
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    if (!db || !user || !validate()) return;
     setLoading(true);
     try {
-      // TODO: SpacetimeDB create_meeting reducer
-      await new Promise((r) => setTimeout(r, 700));
-      router.push("/meetings");
-    } finally {
+      const scheduledAt = BigInt(new Date(`${date}T${time}`).getTime());
+      await db.reducers.createMeeting({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        scheduledAt,
+        participantIds,
+        agentEnabled,
+      });
+
+      const createdMeeting = Array.from(db.db.meeting.iter())
+        .filter((meeting: Meeting) => meeting.createdBy === user.id && meeting.title === title.trim() && meeting.scheduledAt === scheduledAt)
+        .sort((a, b) => Number(b.id) - Number(a.id))[0];
+
+      router.push(createdMeeting ? `/meetings/${createdMeeting.id.toString()}` : "/meetings");
+    } catch (error) {
+      console.error("Failed to schedule meeting", error);
+      setErrors({ submit: "Failed to schedule meeting. Please try again." });
       setLoading(false);
     }
   }
 
+  if (!user) return null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="page-header">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => router.back()}
-          style={{ marginRight: 4 }}
-        >
+        <button className="btn btn-ghost btn-sm" onClick={() => router.back()} style={{ marginRight: 4 }}>
           ← Back
         </button>
         <h1 className="page-title">Schedule Meeting</h1>
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          padding: "var(--space-6)",
-          display: "grid",
-          gridTemplateColumns: "1fr 360px",
-          gap: "var(--space-6)",
-          alignItems: "start",
-        }}
-      >
-        {/* Left — main form */}
+      <div style={{ flex: 1, overflow: "auto", padding: "var(--space-6)", display: "grid", gridTemplateColumns: "1fr 360px", gap: "var(--space-6)", alignItems: "start" }}>
         <form onSubmit={handleSubmit}>
-          <div
-            className="card"
-            style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}
-          >
-            <Input
-              label="Meeting title"
-              placeholder="e.g. Q3 Planning Session"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              error={errors.title}
-              autoFocus
-            />
-
-            <Textarea
-              label="Description (optional)"
-              placeholder="What will this meeting cover?"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+          <div className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+            <Input label="Meeting title" placeholder="e.g. Q3 Planning Session" value={title} onChange={(e) => setTitle(e.target.value)} error={errors.title} autoFocus />
+            <Textarea label="Description (optional)" placeholder="What will this meeting cover?" value={description} onChange={(e) => setDescription(e.target.value)} />
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
-              <Input
-                label="Date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                error={errors.date}
-              />
-              <Input
-                label="Time"
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                error={errors.time}
-              />
+              <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} error={errors.date} />
+              <Input label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} error={errors.time} />
             </div>
 
-            {/* Duration */}
             <div className="form-field">
               <label className="form-label">Duration</label>
               <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-                {DURATIONS.map((d) => (
-                  <button
-                    key={d.value}
-                    type="button"
-                    onClick={() => setDuration(d.value)}
-                    className={`btn btn-${duration === d.value ? "primary" : "secondary"} btn-sm`}
-                  >
-                    {d.label}
+                {DURATIONS.map((option) => (
+                  <button key={option.value} type="button" onClick={() => setDuration(option.value)} className={`btn btn-${duration === option.value ? "primary" : "secondary"} btn-sm`}>
+                    {option.label}
                   </button>
                 ))}
               </div>
+              <p style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
+                Duration is used for scheduling context; the LiveKit room ends when participants leave or the host ends it.
+              </p>
             </div>
 
-            {/* CC Agent toggle */}
             <div className="toggle-wrapper">
               <div>
                 <div className="toggle-label">CC Assistant joins automatically</div>
-                <div className="toggle-hint">
-                  CC will listen, flag repeated topics, and generate a summary.
-                </div>
+                <div className="toggle-hint">CC listens, flags repeated topics, and generates a summary.</div>
               </div>
-              <div
-                className={`toggle ${agentEnabled ? "on" : ""}`}
-                onClick={() => setAgentEnabled(!agentEnabled)}
-              />
+              <button type="button" aria-pressed={agentEnabled} className={`toggle ${agentEnabled ? "on" : ""}`} onClick={() => setAgentEnabled(!agentEnabled)} />
             </div>
+
+            {errors.submit && <div className="form-error">{errors.submit}</div>}
           </div>
 
           <div style={{ marginTop: "var(--space-5)", display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
-            <Button type="button" variant="secondary" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary" loading={loading}>
-              Schedule Meeting
-            </Button>
+            <Button type="button" variant="secondary" onClick={() => router.back()}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={loading}>Schedule Meeting</Button>
           </div>
         </form>
 
-        {/* Right — participant picker */}
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-          <h3 style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>
-            Participants
-          </h3>
+          <h3 style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>Participants</h3>
 
-          {/* Selected */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
             {participantIds.map((id) => {
-              const user = MOCK_USERS.find((u) => u.id === id)!;
+              const participant = team.find((teamUser) => teamUser.id === id) || user;
               return (
-                <div
-                  key={id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-2)",
-                    padding: "6px 8px",
-                    background: "var(--color-surface)",
-                    borderRadius: "var(--radius-md)",
-                  }}
-                >
-                  <Avatar name={user.name} size="sm" />
-                  <span style={{ flex: 1, fontSize: "var(--text-sm)" }}>{user.name}</span>
-                  {id === CURRENT_USER_ID ? (
+                <div key={id.toString()} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "6px 8px", background: "var(--color-surface)", borderRadius: "var(--radius-md)" }}>
+                  <Avatar name={participant.displayName || participant.email} size="sm" />
+                  <span style={{ flex: 1, fontSize: "var(--text-sm)" }}>{participant.displayName || participant.email}</span>
+                  {id === user.id ? (
                     <span className="badge badge-default">You</span>
                   ) : (
-                    <button
-                      onClick={() => toggleUser(id)}
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color: "var(--color-muted)",
-                        cursor: "pointer",
-                        background: "none",
-                        border: "none",
-                        padding: "0 4px",
-                      }}
-                    >
+                    <button type="button" onClick={() => toggleUser(id)} style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", cursor: "pointer", background: "none", border: "none", padding: "0 4px" }}>
                       ✕
                     </button>
                   )}
@@ -222,47 +193,19 @@ export default function NewMeetingPage() {
             })}
           </div>
 
-          {/* Search + add */}
           <div>
-            <input
-              className="input"
-              placeholder="Search people..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ marginBottom: "var(--space-2)" }}
-            />
+            <input className="input" placeholder="Search people..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: "var(--space-2)" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", maxHeight: 200, overflow: "auto" }}>
-              {unselectedUsers.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => toggleUser(u.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-2)",
-                    padding: "7px 8px",
-                    borderRadius: "var(--radius-md)",
-                    cursor: "pointer",
-                    background: "none",
-                    border: "none",
-                    textAlign: "left",
-                    width: "100%",
-                    transition: "background var(--transition-fast)",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-surface)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-                >
-                  <Avatar name={u.name} size="sm" />
-                  <span style={{ fontSize: "var(--text-sm)" }}>{u.name}</span>
+              {unselectedUsers.map((teamUser) => (
+                <button key={teamUser.id.toString()} type="button" onClick={() => toggleUser(teamUser.id)} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "7px 8px", borderRadius: "var(--radius-md)", cursor: "pointer", background: "none", border: "none", textAlign: "left", width: "100%" }}>
+                  <Avatar name={teamUser.displayName || teamUser.email} size="sm" />
+                  <span style={{ fontSize: "var(--text-sm)" }}>{teamUser.displayName || teamUser.email}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {errors.participants && (
-            <span className="form-error">{errors.participants}</span>
-          )}
+          {errors.participants && <span className="form-error">{errors.participants}</span>}
         </div>
       </div>
     </div>
