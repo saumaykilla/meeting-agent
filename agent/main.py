@@ -3,8 +3,6 @@ load_dotenv()
 
 import os
 
-import asyncio
-from livekit import agents
 from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli
 
 from pipeline import CCAgentPipeline
@@ -31,9 +29,4 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    if not os.getenv("GOOGLE_CLOUD_PROJECT"):
-        print("\n❌ ERROR: GOOGLE_CLOUD_PROJECT is not set in your environment variables.")
-        print("   Please add a valid GCP Project ID to your agent/.env file.\n")
-        import sys
-        sys.exit(1)
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, agent_name="CC"))

@@ -8,15 +8,7 @@ from google import genai
 
 class GeminiClient:
     def __init__(self):
-        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if not project:
-            raise RuntimeError("GOOGLE_CLOUD_PROJECT is required for Vertex AI")
-        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-        self.client = genai.Client(
-            vertexai=True,
-            project=project,
-            location=location
-        )
+        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
     async def extract_topic(self, text: str) -> str | None:
         prompt = f"""
@@ -36,7 +28,7 @@ Transcript:
 
     async def answer_question(self, question: str, context: str) -> str:
         prompt = f"""
-You are CC Assistant, an AI meeting assistant.
+You are CC, an AI meeting participant with company memory.
 Answer based on the past meeting context. Be concise and natural.
 
 Past meeting context:
@@ -47,7 +39,7 @@ Question:
 """
         response = await asyncio.to_thread(
             self.client.models.generate_content,
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
         )
         return (response.text or "").strip()

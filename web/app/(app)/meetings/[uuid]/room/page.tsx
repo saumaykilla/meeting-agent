@@ -68,7 +68,7 @@ function MeetingParticipantTile() {
   const trackRef = useEnsureTrackRef();
   const participant = trackRef.participant;
   const participantName = participant.name || participant.identity;
-  const isAgent = participant.identity.startsWith("cc-agent-");
+  const isAgent = participant.identity.startsWith("agent-") || participant.name === "CC";
   const isSpeaking = useIsSpeaking(participant);
   const isTrackMuted = useIsMuted(trackRef);
   const isMicMuted = useIsMuted({ participant, source: Track.Source.Microphone });
@@ -105,7 +105,7 @@ function VideoGrid() {
   const screenShareTracks = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }]);
   const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], { onlySubscribed: false });
   const participants = useParticipants();
-  const hasAgent = participants.some((participant) => participant.identity.startsWith("cc-agent-"));
+  const hasAgent = participants.some((participant) => participant.identity.startsWith("agent-") || participant.name === "CC");
 
   if (screenShareTracks.length > 0) {
     return (
@@ -205,11 +205,11 @@ function MeetingRightPanel({
         <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {participants.map((participant) => (
             <div key={participant.identity} style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <Avatar name={participant.name || participant.identity} size="sm" isAgent={participant.identity.startsWith("cc-agent-")} />
+              <Avatar name={participant.name || participant.identity} size="sm" isAgent={participant.identity.startsWith("agent-") || participant.name === "CC"} />
               <div>
                 <div style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{participant.name || participant.identity}</div>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)" }}>
-                  {participant.identity.startsWith("cc-agent-") ? "AI Assistant" : "Participant"}
+                  {participant.identity.startsWith("agent-") || participant.name === "CC" ? "AI Assistant" : "Participant"}
                 </div>
               </div>
             </div>

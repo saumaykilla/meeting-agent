@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Cognitive Catalyst - Meetings with a Memory</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+
+        /* Generic Reveal */
+        .reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.8s ease-out;
+        }
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+            /* Hero Entrance Animations */
+            .hero-entrance {
+                opacity: 0;
+                transform: translateY(30px);
+                animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+            .hero-delay-1 { animation-delay: 0.1s; }
+            .hero-delay-2 { animation-delay: 0.25s; }
+            .hero-delay-3 { animation-delay: 0.4s; }
+            .hero-delay-4 { animation-delay: 0.55s; }
+
+            @keyframes fadeInUp {
+                from { opacity: 0; transform: translateY(30px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            /* Ambient Hero Image */
+            .ambient-float {
+                animation: float 8s ease-in-out infinite;
+            }
+
+            @keyframes float {
+                0% { transform: translateY(0) scale(1); }
+                50% { transform: translateY(-15px) scale(1.02); }
+                100% { transform: translateY(0) scale(1); }
+            }
+
+            /* Scroll Reveals */
+            .reveal-card {
+                opacity: 0;
+                transform: translateY(40px) scale(0.95);
+                transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .reveal-card.active {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Hover Effects */
+        .btn-hover-glow {
+            transition: transform 0.3s ease-out, box-shadow 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        .btn-hover-glow:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(124, 92, 252, 0.4);
+        }
+
+        .card-hover-tilt {
+            transition: transform 0.4s ease-out, border-color 0.4s ease-out, box-shadow 0.4s ease-out;
+        }
+        .card-hover-tilt:hover {
+            transform: translateY(-6px) scale(1.01);
+            border-color: #7C5CFC;
+            box-shadow: 0 16px 40px rgba(124, 92, 252, 0.08);
+        }
+
+        /* Micro-interactions */
+        a, button {
+            transition: all 0.3s ease-out;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-dim": "#dbdad9",
+                      "on-secondary-container": "#636262",
+                      "secondary": "#5f5e5e",
+                      "surface-variant": "#e4e2e2",
+                      "secondary-fixed": "#e5e2e1",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-fixed": "#1a1c1b",
+                      "on-secondary-fixed-variant": "#474746",
+                      "on-surface-variant": "#484555",
+                      "surface-container-highest": "#e4e2e2",
+                      "tertiary-fixed-dim": "#c7c6c5",
+                      "on-error-container": "#93000a",
+                      "primary-container": "#7857f8",
+                      "outline": "#797587",
+                      "error": "#ba1a1a",
+                      "on-primary-fixed-variant": "#4918c8",
+                      "surface-bright": "#fbf9f8",
+                      "on-secondary-fixed": "#1c1b1b",
+                      "on-primary-fixed": "#1c0062",
+                      "on-tertiary": "#ffffff",
+                      "outline-variant": "#c9c4d8",
+                      "on-background": "#1b1c1c",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed": "#e3e2e0",
+                      "inverse-surface": "#303031",
+                      "on-error": "#ffffff",
+                      "inverse-primary": "#cabeff",
+                      "on-tertiary-fixed-variant": "#464746",
+                      "surface-container-low": "#f5f3f3",
+                      "surface": "#fbf9f8",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary-fixed-dim": "#c8c6c5",
+                      "on-surface": "#1b1c1c",
+                      "primary-fixed-dim": "#cabeff",
+                      "on-tertiary-container": "#fdfcfa",
+                      "primary-fixed": "#e6deff",
+                      "secondary-container": "#e2dfde",
+                      "on-secondary": "#ffffff",
+                      "primary": "#5f3add",
+                      "surface-container": "#efeded",
+                      "inverse-on-surface": "#f2f0f0",
+                      "tertiary": "#5b5c5b",
+                      "background": "#fbf9f8",
+                      "surface-container-high": "#e9e8e7",
+                      "on-primary-container": "#fffbff",
+                      "tertiary-container": "#747573",
+                      "surface-tint": "#613de0"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "md": "16px",
+                      "gutter": "24px",
+                      "base": "8px",
+                      "xs": "4px",
+                      "lg": "24px",
+                      "xl": "32px",
+                      "container-max": "1280px",
+                      "xxl": "48px",
+                      "sm": "12px"
+              },
+              "fontFamily": {
+                      "label-md": ["Geist", "sans-serif"],
+                      "code": ["Geist", "monospace"],
+                      "display-lg": ["Geist", "sans-serif"],
+                      "body-lg": ["Geist", "sans-serif"],
+                      "title-lg": ["Geist", "sans-serif"],
+                      "headline-lg": ["Geist", "sans-serif"],
+                      "display-lg-mobile": ["Geist", "sans-serif"],
+                      "headline-md": ["Geist", "sans-serif"],
+                      "body-md": ["Geist", "sans-serif"]
+              },
+              "fontSize": {
+                      "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                      "code": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                      "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                      "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                      "title-lg": ["20px", { "lineHeight": "28px", "fontWeight": "500" }],
+                      "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                      "display-lg-mobile": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                      "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                      "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+              }
+      },
+          },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased overflow-x-hidden selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopNavBar -->
+<header class="bg-surface/80 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/30">
+<div class="flex justify-between items-center px-gutter py-md max-w-container-max mx-auto">
+<div class="font-headline-md text-headline-md font-bold text-on-background">
+                Cognitive Catalyst
+            </div>
+<nav class="hidden md:flex gap-lg items-center">
+<a class="font-label-md text-label-md text-primary font-semibold border-b-2 border-primary pb-1 active hover:text-primary/80" href="#">Product</a>
+<a class="font-label-md text-label-md text-secondary hover:text-primary transition-colors pb-1" href="#">Features</a>
+<a class="font-label-md text-label-md text-secondary hover:text-primary transition-colors pb-1" href="#">Pricing</a>
+</nav>
+<div class="flex items-center gap-md">
+<button class="font-label-md text-label-md bg-primary text-on-primary px-lg py-sm rounded-full hover:opacity-90 transition-opacity btn-hover-glow">
+                    Get Started
+                </button>
+</div>
+</div>
+</header>
+<main class="pt-[80px]">
+<!-- Hero Section -->
+<section class="relative min-h-[90vh] flex items-center overflow-hidden">
+<div class="absolute inset-0 z-0">
+<img alt="Abstract minimalist 3D background" class="w-full h-full object-cover opacity-80 ambient-float" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD401-Y4iN_HPTpyA-uK5vxWgFnicFotYvfZtjLBVPHEjG_PkR4lq0829W586XpbqWyJPOMGYwD4lPR3z64qLFaYLTdI70hcQUrrjyJOTNvpQnt5D22LjX6fOTBIFGl7RwtCX31cJnquABGIzihNmtOqfwgtX-0j8yaaIICEEGL2CqAdIneoibmY5ycq6g72fXz6J8hMIk8QTzzBt5PjvYvfZ2GiluccpYjMbJcQHgj9UwyT7JBy7HSAOmdzpDV3N6VGP8SY9VH64M"/>
+<div class="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-transparent"></div>
+</div>
+<div class="max-w-container-max mx-auto px-gutter w-full relative z-10 grid md:grid-cols-2 gap-xl">
+<div class="flex flex-col justify-center">
+<div class="inline-flex items-center gap-xs bg-surface-container-low border border-outline-variant px-sm py-xs rounded-full mb-lg w-max hero-entrance hero-delay-1">
+<span class="material-symbols-outlined text-primary text-[16px]">memory</span>
+<span class="font-label-md text-label-md text-on-surface-variant">Cognitive Catalyst AI 2.0</span>
+</div>
+<h1 class="font-display-lg text-display-lg md:font-display-lg md:text-display-lg mb-md text-on-background hero-entrance hero-delay-2">
+                        Meetings with a <span class="text-primary">Memory.</span>
+</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-xl max-w-xl hero-entrance hero-delay-3">
+                        The AI agent that listens in real-time and resurfaces solutions from past meetings before you even ask. Silence the noise, amplify the signal.
+                    </p>
+<div class="flex flex-wrap items-center gap-md hero-entrance hero-delay-4">
+<button class="font-label-md text-label-md bg-primary text-on-primary px-xl py-sm rounded-full hover:opacity-90 shadow-[0px_4px_20px_rgba(124,92,252,0.3)] btn-hover-glow">
+                            Get Started
+                        </button>
+<button class="font-label-md text-label-md bg-surface text-on-background border border-outline-variant px-xl py-sm rounded-full hover:bg-surface-container-low flex items-center gap-xs btn-hover-glow hover:border-primary/50">
+<span class="material-symbols-outlined text-[18px]">play_circle</span>
+                            View Demo
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Features Section -->
+<section class="py-xxl bg-surface-container-low">
+<div class="max-w-container-max mx-auto px-gutter">
+<div class="text-center mb-xxl reveal">
+<h2 class="font-headline-lg text-headline-lg text-on-background mb-sm">Intelligence in Action</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+                        A suite of tools designed to turn every conversation into an actionable asset.
+                    </p>
+</div>
+<div class="grid md:grid-cols-3 gap-lg">
+<!-- Bento Card 1 -->
+<div class="bg-surface border border-outline-variant rounded-xl p-xl flex flex-col h-full group reveal-card card-hover-tilt">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mb-lg text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary/20">
+<span class="material-symbols-outlined filled text-[24px]">bolt</span>
+</div>
+<h3 class="font-title-lg text-title-lg text-on-background mb-sm">Real-time Insight Sharing</h3>
+<p class="font-body-md text-body-md text-on-surface-variant flex-grow">
+                            AI surfaces past solutions instantly as you speak, providing relevant context precisely when it's needed during active discussions.
+                        </p>
+</div>
+<!-- Bento Card 2 -->
+<div class="bg-surface border border-outline-variant rounded-xl p-xl flex flex-col h-full group md:-translate-y-md reveal-card card-hover-tilt">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mb-lg text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary/20">
+<span class="material-symbols-outlined filled text-[24px]">hub</span>
+</div>
+<h3 class="font-title-lg text-title-lg text-on-background mb-sm">Deep Meeting Memory</h3>
+<p class="font-body-md text-body-md text-on-surface-variant flex-grow">
+                            Connect dots across months of transcripts. Our advanced vector search links seemingly unrelated ideas across your organization's history.
+                        </p>
+</div>
+<!-- Bento Card 3 -->
+<div class="bg-surface border border-outline-variant rounded-xl p-xl flex flex-col h-full group reveal-card card-hover-tilt">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center mb-lg text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary/20">
+<span class="material-symbols-outlined filled text-[24px]">history_edu</span>
+</div>
+<h3 class="font-title-lg text-title-lg text-on-background mb-sm">Precision Transcription</h3>
+<p class="font-body-md text-body-md text-on-surface-variant flex-grow">
+                            High-fidelity logs for every conversation. Captures nuance, technical jargon, and action items with unparalleled accuracy.
+                        </p>
+</div>
+</div>
+</div>
+</section>
+<!-- How it Works -->
+<section class="py-xxl bg-background border-t border-outline-variant/30">
+<div class="max-w-container-max mx-auto px-gutter">
+<div class="flex flex-col md:flex-row gap-xxl items-center">
+<div class="md:w-1/2 reveal">
+<h2 class="font-headline-lg text-headline-lg text-on-background mb-xl">How it operates.</h2>
+<div class="space-y-xl relative">
+<!-- Vertical line connector -->
+<div class="absolute left-[23px] top-[40px] bottom-[40px] w-[2px] bg-outline-variant/50 hidden md:block"></div>
+<!-- Step 1 -->
+<div class="flex gap-lg relative z-10 group reveal" style="transition-delay: 0.1s;">
+<div class="w-12 h-12 shrink-0 rounded-full bg-surface border border-outline-variant flex items-center justify-center font-title-lg text-title-lg text-primary shadow-sm group-hover:bg-primary-container group-hover:border-primary/50 transition-all duration-300">
+                                    1
+                                </div>
+<div>
+<h4 class="font-title-lg text-title-lg text-on-background mb-xs transition-colors group-hover:text-primary">Integrate Silently</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">Connects to your calendar and joins meetings as a silent observer, requiring zero manual setup per call.</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex gap-lg relative z-10 group reveal" style="transition-delay: 0.2s;">
+<div class="w-12 h-12 shrink-0 rounded-full bg-surface border border-outline-variant flex items-center justify-center font-title-lg text-title-lg text-primary shadow-sm group-hover:bg-primary-container group-hover:border-primary/50 transition-all duration-300">
+                                    2
+                                </div>
+<div>
+<h4 class="font-title-lg text-title-lg text-on-background mb-xs transition-colors group-hover:text-primary">Analyze in Real-time</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">Processes audio streams instantly, indexing context and intent to build a structured knowledge graph.</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex gap-lg relative z-10 group reveal" style="transition-delay: 0.3s;">
+<div class="w-12 h-12 shrink-0 rounded-full bg-surface border border-outline-variant flex items-center justify-center font-title-lg text-title-lg text-primary shadow-sm group-hover:bg-primary-container group-hover:border-primary/50 transition-all duration-300">
+                                    3
+                                </div>
+<div>
+<h4 class="font-title-lg text-title-lg text-on-background mb-xs transition-colors group-hover:text-primary">Surface Solutions</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">Pushes relevant historical context and decisions to your dashboard exactly when the topic arises.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="md:w-1/2 reveal" style="transition-delay: 0.4s;">
+<div class="relative rounded-2xl overflow-hidden border border-outline-variant shadow-[0px_12px_32px_rgba(26,26,26,0.08)] bg-surface aspect-square md:aspect-auto md:h-[600px] hover:shadow-[0px_20px_48px_rgba(124,92,252,0.15)] hover:border-primary/40 transition-all duration-500">
+<!-- Abstract minimal visualization of data processing -->
+<img class="w-full h-full object-cover opacity-90 transition-transform duration-700 hover:scale-105" data-alt="A sleek, high-tech abstract visualization representing data processing and AI intelligence." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3-VC7mMf0OqV787FUMdINfdwfhRsg963GUjyIRTacdvyX9zJElre42hKP0BXuxaqe0QUSmYXHWBdhuc1keLCVvZIviMfy5EpxCraqxoWJM0Q8a6Sfy5gs0Dxw1Qx8gEWuUXoI1k-UY-Rha4djS__3ZTHtLarnOuZlPeTzxpsCbFPIqI6wuwb_gjcakjj4VC_mkA5R66o3Igx04Q-lxcV451qmWVDmw3syD-akABxFoz-3cjQ6oSi2l3uzlYSObkKi9oTR19eGd8E"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent pointer-events-none"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full py-xxl bg-surface-container dark:bg-surface-dim border-t border-outline-variant">
+<div class="max-w-container-max mx-auto px-gutter grid grid-cols-1 md:grid-cols-4 gap-xl">
+<div class="md:col-span-1">
+<div class="font-headline-md text-headline-md font-bold text-on-background mb-md">
+                    Cognitive Catalyst
+                </div>
+<p class="font-body-md text-body-md text-on-surface-variant">
+                    © 2024 Cognitive Catalyst Inc. All rights reserved.
+                </p>
+</div>
+<div class="md:col-span-3 flex flex-wrap gap-lg justify-end items-start font-body-md text-body-md">
+<a class="text-on-secondary-fixed-variant hover:text-primary hover:-translate-y-1 transition-all duration-300" href="#">Privacy Policy</a>
+<a class="text-on-secondary-fixed-variant hover:text-primary hover:-translate-y-1 transition-all duration-300" href="#">Terms of Service</a>
+<a class="text-on-secondary-fixed-variant hover:text-primary hover:-translate-y-1 transition-all duration-300" href="#">Twitter</a>
+<a class="text-on-secondary-fixed-variant hover:text-primary hover:-translate-y-1 transition-all duration-300" href="#">LinkedIn</a>
+<a class="text-on-secondary-fixed-variant hover:text-primary hover:-translate-y-1 transition-all duration-300" href="#">Contact Us</a>
+</div>
+</div>
+</footer>
+<!-- Reveal Animation Script -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            if (!prefersReducedMotion) {
+                // Generic Intersection Observer for reveals
+                const revealObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('active');
+                            revealObserver.unobserve(entry.target);
+                        }
+                    });
+                }, {
+                    threshold: 0.1,
+                    rootMargin: "0px 0px -50px 0px"
+                });
+
+                document.querySelectorAll('.reveal').forEach((el) => {
+                    revealObserver.observe(el);
+                });
+
+                // Staggered observer for feature cards
+                const cardObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            setTimeout(() => {
+                                entry.target.classList.add('active');
+                            }, parseInt(entry.target.dataset.delay || 0));
+                            cardObserver.unobserve(entry.target);
+                        }
+                    });
+                }, {
+                    threshold: 0.1,
+                    rootMargin: "0px 0px -50px 0px"
+                });
+
+                document.querySelectorAll('.reveal-card').forEach((el, index) => {
+                    el.dataset.delay = index * 150; // 150ms stagger
+                    cardObserver.observe(el);
+                });
+            } else {
+                // Fallback for reduced motion - show everything immediately
+                document.querySelectorAll('.reveal, .reveal-card').forEach(el => el.classList.add('active'));
+            }
+        });
+    </script>
+</body></html>

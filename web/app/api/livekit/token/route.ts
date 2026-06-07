@@ -1,4 +1,5 @@
 import { AccessToken } from "livekit-server-sdk";
+import { RoomConfiguration, RoomAgentDispatch } from "@livekit/protocol";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -26,6 +27,14 @@ export async function POST(req: Request) {
     const token = new AccessToken(apiKey, apiSecret, {
       identity: String(participantId),
       name: String(participantName),
+    });
+
+    token.roomConfig = new RoomConfiguration({
+      agents: [
+        new RoomAgentDispatch({
+          agentName: "CC",
+        }),
+      ],
     });
 
     token.addGrant({
