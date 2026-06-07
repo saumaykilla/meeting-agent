@@ -2,7 +2,7 @@
 
 **Concensus AI** is an intelligent meeting assistant and real-time collaboration platform. It joins your meetings as an active participant ("CC"), listens to conversations, remembers past decisions, and intelligently interjects when the team is discussing a problem or topic that has already been resolved in past meetings. 
 
-🔗 **Live Demo:** [https://concencus-ai.vercel.app](https://concencus-ai.vercel.app)
+🔗 **Live Demo:** [https://concencus-ai.vercel.app](https://concensus-ai.vercel.app/)
 
 ---
 
