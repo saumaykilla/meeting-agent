@@ -38,8 +38,8 @@ export default function MeetingLobbyPage(props: { params: Promise<{ uuid: string
   const [users, setUsers] = useState<User[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [summary, setSummary] = useState<MeetingSummary | undefined>();
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const timer = useLiveElapsed(meeting);
 
