@@ -160,7 +160,8 @@ export default function AdminEmployeesPage() {
           </div>
         </div>
 
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        {/* Desktop Table View */}
+        <div className="card desktop-only" style={{ padding: 0, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
@@ -232,6 +233,80 @@ export default function AdminEmployeesPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="mobile-only" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          {employees.map((employee) => {
+            const isPending = employee.mustResetPassword;
+            const busy = loadingUserId === employee.id;
+            return (
+              <div key={employee.id.toString()} className="card" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <Avatar name={employee.displayName || employee.email} />
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <div style={{ fontWeight: 500, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                      {employee.displayName || "Pending setup"}
+                    </div>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                      {employee.email}
+                    </div>
+                  </div>
+                  <div>
+                    {isPending ? (
+                      <Badge variant="warning">Needs reset</Badge>
+                    ) : employee.isActive ? (
+                      <Badge variant="success">Active</Badge>
+                    ) : (
+                      <Badge variant="danger">Removed</Badge>
+                    )}
+                  </div>
+                </div>
+                
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Role:</div>
+                  <div>
+                    {isPending ? (
+                      <Badge variant={employee.role === "Admin" ? "accent" : "default"}>{employee.role}</Badge>
+                    ) : (
+                      <select
+                        className="input select"
+                        style={{ width: 130, padding: "4px 28px 4px 8px", minHeight: 32 }}
+                        value={employee.role}
+                        disabled={busy}
+                        onChange={(event) => updateRole(employee, event.target.value)}
+                      >
+                        <option value="Employee">Employee</option>
+                        <option value="Admin">Admin</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Joined:</div>
+                  <div style={{ fontSize: "var(--text-sm)" }}>{formatDate(employee.createdAt)}</div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                  {isPending ? (
+                    <>
+                      <Button variant="secondary" size="sm" disabled={busy} onClick={() => resendInvite(employee)}>
+                        Regenerate
+                      </Button>
+                      <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirmAction({ type: "revoke", user: employee })}>
+                        Revoke
+                      </Button>
+                    </>
+                  ) : employee.isActive ? (
+                    <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirmAction({ type: "remove", user: employee })}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

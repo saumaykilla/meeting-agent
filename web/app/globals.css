@@ -254,7 +254,7 @@ img, video {
   }
   
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
   .app-shell {
     flex-direction: column;
@@ -1852,4 +1852,15 @@ img, video {
   0% { box-shadow: 0 0 0 0 rgba(124, 92, 252, 0.7); }
   70% { box-shadow: 0 0 0 10px rgba(124, 92, 252, 0); }
   100% { box-shadow: 0 0 0 0 rgba(124, 92, 252, 0); }
+}
+
+/* ============================================================
+   Responsive Utilities
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+}
+@media (min-width: 769px) {
+  .mobile-only { display: none !important; }
 }
