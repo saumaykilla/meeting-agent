@@ -1,6 +1,6 @@
-# Consensus AI
+# Concensus AI
 
-**Consensus AI** is an intelligent meeting assistant and real-time collaboration platform. It joins your meetings as an active participant ("CC"), listens to conversations, remembers past decisions, and intelligently interjects when the team is discussing a problem or topic that has already been resolved in past meetings. 
+**Concensus AI** is an intelligent meeting assistant and real-time collaboration platform. It joins your meetings as an active participant ("CC"), listens to conversations, remembers past decisions, and intelligently interjects when the team is discussing a problem or topic that has already been resolved in past meetings. 
 
 🔗 **Live Demo:** [https://concencus-ai.vercel.app](https://concencus-ai.vercel.app)
 
@@ -8,7 +8,7 @@
 
 ## 🏗 Architecture & Tools Used
 
-Consensus AI is built using a modern, real-time, AI-native stack:
+Concensus AI is built using a modern, real-time, AI-native stack:
 
 - **Frontend Application:**
   - **Framework:** [Next.js](https://nextjs.org/) (App Router) & React
