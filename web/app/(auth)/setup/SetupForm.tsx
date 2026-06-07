@@ -1,74 +1,43 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/components/AuthProvider";
-import type { Company, User } from "@/lib/spacetimedb-types/types";
+import { hashPassword } from "@/lib/password";
 
 export default function SetupForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-
-  const [companyName, setCompanyName] = useState("Your Company");
-  const [email, setEmail] = useState("");
-  const [tokenValid, setTokenValid] = useState<boolean | null>(null);
-
   const [form, setForm] = useState({
     displayName: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const { isLoading, user, db } = useAuth();
 
   useEffect(() => {
-    if (user && loading && user.isActive) {
-      router.push("/dashboard");
+    if (isLoading) return;
+    if (!user) {
+      router.push("/login");
+      return;
     }
-  }, [user, loading, router]);
+    if (!user.mustResetPassword) {
+      router.push("/dashboard");
+      return;
+    }
+    // The setup form mirrors the subscribed user row once auth has resolved.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((prev) => ({
+      ...prev,
+      displayName: prev.displayName || user.displayName,
+    }));
+  }, [user, isLoading, router]);
 
-  useEffect(() => {
-    if (isLoading) return; // Wait for SpacetimeDB to sync
-
-    const resolveInvite = () => {
-      if (!token) {
-        setTokenValid(false);
-        return;
-      }
-
-      let foundUser: User | null = null;
-      let foundCompany: Company | null = null;
-
-      if (!db) return;
-
-      for (const u of db.db.user.iter()) {
-        if (u.inviteToken === token) {
-          foundUser = u;
-          for (const c of db.db.company.iter()) {
-            if (c.id === u.companyId) {
-              foundCompany = c;
-              break;
-            }
-          }
-          break;
-        }
-      }
-
-      if (foundUser && foundCompany && !foundUser.isActive) {
-        setEmail(foundUser.email);
-        setCompanyName(foundCompany.name);
-        setTokenValid(true);
-      } else {
-        setTokenValid(false);
-      }
-    };
-
-    resolveInvite();
-  }, [token, isLoading, db]);
-
-  function set(key: string, value: string) {
+  function set(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: "" }));
   }
@@ -77,13 +46,19 @@ export default function SetupForm() {
     const e: Record<string, string> = {};
     if (!form.displayName.trim() || form.displayName.length < 2)
       e.displayName = "Name must be at least 2 characters.";
+    if (!form.currentPassword)
+      e.currentPassword = "Temporary password is required.";
+    if (form.newPassword.length < 8)
+      e.newPassword = "New password must be at least 8 characters.";
+    if (form.confirmPassword !== form.newPassword)
+      e.confirmPassword = "Passwords do not match.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate() || !user) return;
     setLoading(true);
     try {
       if (!db) {
@@ -92,42 +67,28 @@ export default function SetupForm() {
         return;
       }
 
-      await db.reducers.acceptInvite({ token: token as string, displayName: form.displayName });
+      const oldPasswordHash = await hashPassword(user.email, form.currentPassword);
+      const newPasswordHash = await hashPassword(user.email, form.newPassword);
+      await db.reducers.updatePassword({
+        oldPasswordHash,
+        newPasswordHash,
+        displayName: form.displayName.trim(),
+      });
     } catch (err) {
       console.error(err);
-      setErrors({ submit: "Failed to set up your account. The invite link may have expired." });
+      setErrors({ submit: "Failed to reset password. Check the temporary password and try again." });
       setLoading(false);
     }
   }
 
-  if (tokenValid === null) {
+  if (isLoading || !user || !user.mustResetPassword) {
     return (
       <div className="auth-page">
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
           <div className="spinner spinner-lg" />
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
-            Verifying invite link...
+            Loading account setup...
           </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!tokenValid) {
-    return (
-      <div className="auth-page">
-        <div className="auth-card" style={{ textAlign: "center" }}>
-          <div className="auth-logo">CC</div>
-          <h1 className="auth-title" style={{ marginBottom: 8 }}>
-            Invalid invite link
-          </h1>
-          <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", marginBottom: 24 }}>
-            This invite link is expired or has already been used.
-            Ask your admin to send a new one.
-          </p>
-          <Button variant="secondary" onClick={() => router.push("/login")}>
-            Go to sign in
-          </Button>
         </div>
       </div>
     );
@@ -138,26 +99,9 @@ export default function SetupForm() {
       <div className="auth-card">
         <div className="auth-logo">CC</div>
 
-        <div
-          style={{
-            background: "var(--color-agent-bg)",
-            border: "1px solid var(--color-agent-border)",
-            borderRadius: "var(--radius-md)",
-            padding: "12px 14px",
-            marginBottom: 24,
-            fontSize: "var(--text-sm)",
-          }}
-        >
-          <span style={{ color: "var(--color-agent-text)", fontWeight: 600 }}>
-            {companyName}
-          </span>{" "}
-          <span style={{ color: "var(--color-muted)" }}>has invited you to join CC</span>
-        </div>
-
-        <h1 className="auth-title">Set up your account</h1>
+        <h1 className="auth-title">Reset your password</h1>
         <p className="auth-subtitle">
-          You were invited as{" "}
-          <strong style={{ color: "var(--color-primary)" }}>{email}</strong>
+          Finish setup for <strong style={{ color: "var(--color-primary)" }}>{user.email}</strong>
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit} style={{ marginTop: 20 }}>
@@ -170,17 +114,26 @@ export default function SetupForm() {
             autoFocus
           />
           <Input
-            label="Email"
-            type="email"
-            value={email}
-            disabled
-            hint="Your email is set by the invite and cannot be changed."
+            label="Temporary password"
+            type="password"
+            value={form.currentPassword}
+            onChange={(e) => set("currentPassword", e.target.value)}
+            error={errors.currentPassword}
           />
-
-          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", lineHeight: 1.5 }}>
-            Joining links this invite to your current SpacetimeDB browser identity.
-            CC will not create or store a separate password.
-          </p>
+          <Input
+            label="New password"
+            type="password"
+            value={form.newPassword}
+            onChange={(e) => set("newPassword", e.target.value)}
+            error={errors.newPassword}
+          />
+          <Input
+            label="Confirm new password"
+            type="password"
+            value={form.confirmPassword}
+            onChange={(e) => set("confirmPassword", e.target.value)}
+            error={errors.confirmPassword}
+          />
 
           {errors.submit && (
             <div
@@ -204,7 +157,7 @@ export default function SetupForm() {
             loading={loading}
             style={{ width: "100%", marginTop: 4 }}
           >
-            Join {companyName}
+            Save new password
           </Button>
         </form>
       </div>

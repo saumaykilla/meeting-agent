@@ -9,7 +9,7 @@ export default function SetupPage() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
             <div className="spinner spinner-lg" />
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>
-              Verifying invite link...
+              Loading account setup...
             </p>
           </div>
         </div>

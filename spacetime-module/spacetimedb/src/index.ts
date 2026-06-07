@@ -31,8 +31,17 @@ const spacetimedb = schema({
       displayName: t.string(),
       role: t.string(), // "Admin" | "Employee"
       inviteToken: t.option(t.string()),
+      mustResetPassword: t.bool(),
       isActive: t.bool(),
       createdAt: t.u64(),
+    }
+  ),
+  authCredential: table(
+    { public: false },
+    {
+      userId: t.u64().primaryKey(),
+      email: t.string(),
+      passwordHash: t.string(),
     }
   ),
 
@@ -124,16 +133,6 @@ function now(ctx: ReducerCtx<S>): bigint {
   return ctx.timestamp.toMillis();
 }
 
-function makeInviteToken(ctx: ReducerCtx<S>): string {
-  const parts = [
-    now(ctx).toString(36),
-    ctx.random.uint32().toString(36),
-    ctx.random.uint32().toString(36),
-    ctx.random.uint32().toString(36),
-  ];
-  return `invite-${parts.join("-")}`;
-}
-
 function currentUser(ctx: ReducerCtx<S>) {
   const identity = ctx.sender.toHexString();
   for (const user of ctx.db.user.iter()) {
@@ -146,8 +145,11 @@ function currentUser(ctx: ReducerCtx<S>) {
 
 function requireActiveUser(ctx: ReducerCtx<S>) {
   const user = currentUser(ctx);
-  if (!user || !user.isActive || user.inviteToken) {
+  if (!user || !user.isActive) {
     throw new Error("You must be signed in with an active account.");
+  }
+  if (user.mustResetPassword) {
+    throw new Error("You must reset your password before continuing.");
   }
   return user;
 }
@@ -163,7 +165,7 @@ function requireAdmin(ctx: ReducerCtx<S>) {
 function countActiveAdmins(ctx: ReducerCtx<S>, companyId: bigint): number {
   let count = 0;
   for (const user of ctx.db.user.iter()) {
-    if (user.companyId === companyId && user.role === "Admin" && user.isActive && !user.inviteToken) {
+    if (user.companyId === companyId && user.role === "Admin" && user.isActive && !user.mustResetPassword) {
       count += 1;
     }
   }
@@ -197,9 +199,30 @@ function assertEmailUnused(ctx: ReducerCtx<S>, email: string, exceptUserId?: big
       user.email.toLowerCase() === normalizedEmail &&
       user.id !== exceptUserId
     ) {
-      throw new Error(user.inviteToken ? "An invite is already pending for this email." : "An account already exists for this email.");
+      throw new Error(user.mustResetPassword ? "A first-login password is already pending for this email." : "An account already exists for this email.");
     }
   }
+}
+
+function findUserByEmail(ctx: ReducerCtx<S>, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  for (const credential of ctx.db.authCredential.iter()) {
+    if (credential.email.toLowerCase() === normalizedEmail) {
+      const user = ctx.db.user.id.find(credential.userId);
+      if (user) {
+        return { user, credential };
+      }
+    }
+  }
+  return undefined;
+}
+
+function assertPasswordHash(passwordHash: string) {
+  const trimmedHash = passwordHash.trim();
+  if (!trimmedHash) {
+    throw new Error("Password is required.");
+  }
+  return trimmedHash;
 }
 
 function assertIdentityUnused(ctx: ReducerCtx<S>) {
@@ -251,6 +274,51 @@ function assertMessageTarget(ctx: ReducerCtx<S>, userCompanyId: bigint, userId: 
   throw new Error("Invalid channel type.");
 }
 
+function ensureGeneralChannelMember(ctx: ReducerCtx<S>, userId: bigint, companyId: bigint) {
+  for (const member of ctx.db.channelMember.iter()) {
+    if (member.userId === userId) {
+      const channel = ctx.db.channel.id.find(member.channelId);
+      if (channel && channel.companyId === companyId && channel.name === "general") {
+        return;
+      }
+    }
+  }
+
+  for (const channel of ctx.db.channel.iter()) {
+    if (channel.companyId === companyId && channel.name === "general") {
+      ctx.db.channelMember.insert({
+        channelId: channel.id,
+        userId,
+        joinedAt: now(ctx),
+      });
+      return;
+    }
+  }
+}
+
+function deleteUserRecord(ctx: ReducerCtx<S>, userId: bigint) {
+  const credential = ctx.db.authCredential.userId.find(userId);
+  if (credential) {
+    ctx.db.authCredential.userId.delete(userId);
+  }
+  for (const member of ctx.db.channelMember.iter()) {
+    if (member.userId === userId) {
+      ctx.db.channelMember.delete(member);
+    }
+  }
+  for (const participant of ctx.db.meetingParticipant.iter()) {
+    if (participant.userId === userId) {
+      ctx.db.meetingParticipant.delete(participant);
+    }
+  }
+  for (const dm of ctx.db.dmConversation.iter()) {
+    if (dm.userAId === userId || dm.userBId === userId) {
+      ctx.db.dmConversation.delete(dm);
+    }
+  }
+  ctx.db.user.id.delete(userId);
+}
+
 // --- REDUCERS ---
 
 // Register company + admin user
@@ -259,9 +327,11 @@ export const registerCompany = spacetimedb.reducer(
     companyName: t.string(),
     adminName: t.string(),
     email: t.string(),
+    passwordHash: t.string(),
   },
-  (ctx: ReducerCtx<S>, { companyName, adminName, email }) => {
+  (ctx: ReducerCtx<S>, { companyName, adminName, email, passwordHash }) => {
     const normalizedEmail = email.trim().toLowerCase();
+    const initialPasswordHash = assertPasswordHash(passwordHash);
     assertEmailUnused(ctx, normalizedEmail);
     assertIdentityUnused(ctx);
 
@@ -288,8 +358,14 @@ export const registerCompany = spacetimedb.reducer(
       displayName: adminName.trim(),
       role: "Admin",
       inviteToken: undefined,
+      mustResetPassword: false,
       isActive: true,
       createdAt: now(ctx),
+    });
+    ctx.db.authCredential.insert({
+      userId: user.id,
+      email: normalizedEmail,
+      passwordHash: initialPasswordHash,
     });
 
     // 3. Update company with actual admin user id
@@ -332,65 +408,76 @@ export const logout = spacetimedb.reducer(
   (_ctx: ReducerCtx<S>) => {}
 );
 
-// Create invite token
+export const login = spacetimedb.reducer(
+  {
+    email: t.string(),
+    passwordHash: t.string(),
+  },
+  (ctx: ReducerCtx<S>, { email, passwordHash }) => {
+    const result = findUserByEmail(ctx, email);
+    if (!result || !result.user.isActive || result.credential.passwordHash !== assertPasswordHash(passwordHash)) {
+      throw new Error("Invalid email or password.");
+    }
+    const { user } = result;
+
+    const identity = ctx.sender.toHexString();
+    for (const existingUser of ctx.db.user.iter()) {
+      if (existingUser.identity === identity && existingUser.id !== user.id) {
+        ctx.db.user.id.update({
+          ...existingUser,
+          identity: undefined,
+        });
+      }
+    }
+
+    ctx.db.user.id.update({
+      ...user,
+      identity,
+    });
+  }
+);
+
+// Create employee account with a generated first-login password.
 export const createInvite = spacetimedb.reducer(
   {
     email: t.string(),
     role: t.string(),
+    passwordHash: t.string(),
   },
-  (ctx: ReducerCtx<S>, { email, role }) => {
+  (ctx: ReducerCtx<S>, { email, role, passwordHash }) => {
     const admin = requireAdmin(ctx);
     assertValidRole(role);
     assertEmailUnused(ctx, email);
+    const initialPasswordHash = assertPasswordHash(passwordHash);
     
-    ctx.db.user.insert({
+    const user = ctx.db.user.insert({
       id: 0n,
       identity: undefined,
       companyId: admin.companyId,
       email: email.trim().toLowerCase(),
       displayName: "",
       role,
-      inviteToken: makeInviteToken(ctx),
-      isActive: false,
+      inviteToken: undefined,
+      mustResetPassword: true,
+      isActive: true,
       createdAt: now(ctx),
+    });
+    ctx.db.authCredential.insert({
+      userId: user.id,
+      email: user.email,
+      passwordHash: initialPasswordHash,
     });
   }
 );
 
-// Accept invite
+// Legacy no-op kept for older generated clients during development.
 export const acceptInvite = spacetimedb.reducer(
   {
     token: t.string(),
     displayName: t.string(),
   },
-  (ctx: ReducerCtx<S>, { token, displayName }) => {
-    assertIdentityUnused(ctx);
-    // Find user with this token
-    // Since iterators are returned, find the first match
-    for (const u of ctx.db.user.iter()) {
-      if (u.inviteToken === token && !u.isActive) {
-        ctx.db.user.id.update({
-          ...u,
-          identity: ctx.sender.toHexString(),
-          displayName: displayName.trim(),
-          inviteToken: undefined,
-          isActive: true,
-        });
-
-        // Add user to the general channel of their company
-        for (const c of ctx.db.channel.iter()) {
-          if (c.companyId === u.companyId && c.name === "general") {
-            ctx.db.channelMember.insert({
-              channelId: c.id,
-              userId: u.id,
-              joinedAt: now(ctx),
-            });
-            break;
-          }
-        }
-        break;
-      }
-    }
+  (_ctx: ReducerCtx<S>, _args) => {
+    throw new Error("Invite tokens are no longer supported. Sign in with email and password.");
   }
 );
 
@@ -662,16 +749,25 @@ export const openDm = spacetimedb.reducer(
 export const regenerateInviteToken = spacetimedb.reducer(
   {
     userId: t.u64(),
+    passwordHash: t.string(),
   },
-  (ctx: ReducerCtx<S>, { userId }) => {
+  (ctx: ReducerCtx<S>, { userId, passwordHash }) => {
     const admin = requireAdmin(ctx);
     const invitedUser = findCompanyUser(ctx, admin.companyId, userId);
-    if (invitedUser.isActive || !invitedUser.inviteToken) {
-      throw new Error("Only pending invites can be regenerated.");
+    if (!invitedUser.mustResetPassword) {
+      throw new Error("Only first-login passwords can be regenerated.");
     }
+    const credential = ctx.db.authCredential.userId.find(invitedUser.id);
+    if (!credential) {
+      throw new Error("Credentials not found.");
+    }
+    ctx.db.authCredential.userId.update({
+      ...credential,
+      passwordHash: assertPasswordHash(passwordHash),
+    });
     ctx.db.user.id.update({
       ...invitedUser,
-      inviteToken: makeInviteToken(ctx),
+      identity: undefined,
     });
   }
 );
@@ -683,14 +779,10 @@ export const revokeInvite = spacetimedb.reducer(
   (ctx: ReducerCtx<S>, { userId }) => {
     const admin = requireAdmin(ctx);
     const invitedUser = findCompanyUser(ctx, admin.companyId, userId);
-    if (invitedUser.isActive || !invitedUser.inviteToken) {
-      throw new Error("Only pending invites can be revoked.");
+    if (!invitedUser.mustResetPassword) {
+      throw new Error("Only first-login accounts can be revoked.");
     }
-    ctx.db.user.id.update({
-      ...invitedUser,
-      inviteToken: undefined,
-      isActive: false,
-    });
+    deleteUserRecord(ctx, invitedUser.id);
   }
 );
 
@@ -735,16 +827,43 @@ export const updatePassword = spacetimedb.reducer(
   {
     oldPasswordHash: t.string(),
     newPasswordHash: t.string(),
+    displayName: t.option(t.string()),
   },
-  (ctx: ReducerCtx<S>, { oldPasswordHash, newPasswordHash }) => {
-    requireActiveUser(ctx);
+  (ctx: ReducerCtx<S>, { oldPasswordHash, newPasswordHash, displayName }) => {
+    const user = currentUser(ctx);
+    if (!user || !user.isActive) {
+      throw new Error("You must be signed in with an active account.");
+    }
+    const credential = ctx.db.authCredential.userId.find(user.id);
+    if (!credential) {
+      throw new Error("Credentials not found.");
+    }
     const nextHash = newPasswordHash.trim();
     if (!nextHash) {
       throw new Error("New password hash is required.");
     }
-    if (!oldPasswordHash.trim()) {
+    if (credential.passwordHash !== assertPasswordHash(oldPasswordHash)) {
       throw new Error("Current password is incorrect.");
     }
+    if (nextHash === credential.passwordHash) {
+      throw new Error("New password must be different.");
+    }
+
+    const nextDisplayName = displayName?.trim() || user.displayName;
+    if (!nextDisplayName || nextDisplayName.length < 2 || nextDisplayName.length > 80) {
+      throw new Error("Display name must be 2-80 characters.");
+    }
+
+    ctx.db.authCredential.userId.update({
+      ...credential,
+      passwordHash: nextHash,
+    });
+    ctx.db.user.id.update({
+      ...user,
+      displayName: nextDisplayName,
+      mustResetPassword: false,
+    });
+    ensureGeneralChannelMember(ctx, user.id, user.companyId);
   }
 );
 
@@ -758,12 +877,7 @@ export const removeUser = spacetimedb.reducer(
     if (targetUser.role === "Admin" && targetUser.isActive && countActiveAdmins(ctx, admin.companyId) <= 1) {
       throw new Error("At least one active admin is required.");
     }
-    ctx.db.user.id.update({
-      ...targetUser,
-      identity: undefined,
-      inviteToken: undefined,
-      isActive: false,
-    });
+    deleteUserRecord(ctx, targetUser.id);
   }
 );
 
@@ -775,12 +889,7 @@ export const leaveCompany = spacetimedb.reducer(
       throw new Error("Transfer admin role before leaving.");
     }
 
-    ctx.db.user.id.update({
-      ...user,
-      identity: undefined,
-      inviteToken: undefined,
-      isActive: false,
-    });
+    deleteUserRecord(ctx, user.id);
   }
 );
 

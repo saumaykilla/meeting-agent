@@ -76,23 +76,6 @@ export function AddChannelModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={isPrivate}
-                onChange={(e) => setIsPrivate(e.target.checked)}
-                style={{ width: 16, height: 16 }}
-              />
-              <span style={{ fontSize: "var(--text-sm)", fontWeight: "var(--font-medium)" }}>Make private</span>
-            </label>
-            {isPrivate && (
-              <p style={{ color: "var(--color-muted)", fontSize: "var(--text-sm)", marginTop: 4, marginLeft: 24 }}>
-                When a channel is set to private, it can only be viewed or joined by invitation.
-              </p>
-            )}
-          </div>
-
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
             <Button variant="ghost" type="button" onClick={onClose}>
               Cancel

@@ -18,6 +18,7 @@ export default __t.row({
   displayName: __t.string().name("display_name"),
   role: __t.string(),
   inviteToken: __t.option(__t.string()).name("invite_token"),
+  mustResetPassword: __t.bool().name("must_reset_password"),
   isActive: __t.bool().name("is_active"),
   createdAt: __t.u64().name("created_at"),
 });

@@ -10,8 +10,8 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  oldPasswordHash: __t.string(),
-  newPasswordHash: __t.string(),
-  displayName: __t.option(__t.string()),
-};
+export default __t.row({
+  userId: __t.u64().primaryKey().name("user_id"),
+  email: __t.string(),
+  passwordHash: __t.string().name("password_hash"),
+});

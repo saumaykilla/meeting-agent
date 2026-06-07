@@ -3,11 +3,11 @@ import { Resend } from "resend";
 
 export async function POST(req: Request) {
   try {
-    const { email, token, companyName } = await req.json();
+    const { email, password, companyName } = await req.json();
 
-    if (!email || !token) {
+    if (!email || !password) {
       return NextResponse.json(
-        { error: "Email and token are required" },
+        { error: "Email and temporary password are required" },
         { status: 400 }
       );
     }
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     const resend = new Resend(process.env.RESEND_API_KEY);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
-    const setupUrl = `${appUrl.replace(/\/$/, "")}/setup?token=${encodeURIComponent(token)}`;
+    const loginUrl = `${appUrl.replace(/\/$/, "")}/login`;
 
     const result = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || "CC Meeting Agent <onboarding@resend.dev>",
@@ -31,11 +31,12 @@ export async function POST(req: Request) {
         <div>
           <h1>Welcome to CC!</h1>
           <p>You have been invited to join <strong>${companyName || "your company"}</strong>.</p>
-          <p>Click the link below to set up your account and join the workspace.</p>
-          <a href="${setupUrl}" style="display: inline-block; padding: 12px 24px; background-color: #2F2F2F; color: white; text-decoration: none; border-radius: 6px;">
-            Join Workspace
+          <p>Sign in with this temporary password. You will be asked to create a new password on first sign-in.</p>
+          <p><strong>Temporary password:</strong> <code>${password}</code></p>
+          <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background-color: #2F2F2F; color: white; text-decoration: none; border-radius: 6px;">
+            Sign in to CC
           </a>
-          <p>Or copy this link: <br/> <a href="${setupUrl}">${setupUrl}</a></p>
+          <p>Or copy this link: <br/> <a href="${loginUrl}">${loginUrl}</a></p>
         </div>
       `,
     });

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/components/AuthProvider";
+import { hashPassword } from "@/lib/password";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function RegisterPage() {
     companyName: "",
     displayName: "",
     email: "",
+    password: "",
+    confirmPassword: "",
     agreed: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -39,6 +42,10 @@ export default function RegisterPage() {
       e.displayName = "Name must be at least 2 characters.";
     if (!form.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/))
       e.email = "Enter a valid email address.";
+    if (form.password.length < 8)
+      e.password = "Password must be at least 8 characters.";
+    if (form.confirmPassword !== form.password)
+      e.confirmPassword = "Passwords do not match.";
     if (!form.agreed) e.agreed = "You must accept the terms.";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -55,10 +62,12 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
+      const passwordHash = await hashPassword(form.email, form.password);
       await db.reducers.registerCompany({
         companyName: form.companyName,
         adminName: form.displayName,
         email: form.email,
+        passwordHash,
       });
       // On success, AuthProvider's onInsert fires, sets user → redirect via useEffect above.
     } catch (err: unknown) {
@@ -78,7 +87,7 @@ export default function RegisterPage() {
 
         <h1 className="auth-title">Create your company</h1>
         <p className="auth-subtitle">
-          Set up CC for your team with your current SpacetimeDB session.
+          Set up CC for your team with an email and password.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -106,6 +115,24 @@ export default function RegisterPage() {
             value={form.email}
             onChange={(e) => set("email", e.target.value)}
             error={errors.email}
+          />
+
+          <Input
+            label="Password"
+            type="password"
+            placeholder="••••••••"
+            value={form.password}
+            onChange={(e) => set("password", e.target.value)}
+            error={errors.password}
+          />
+
+          <Input
+            label="Confirm password"
+            type="password"
+            placeholder="••••••••"
+            value={form.confirmPassword}
+            onChange={(e) => set("confirmPassword", e.target.value)}
+            error={errors.confirmPassword}
           />
 
           <label
@@ -149,11 +176,6 @@ export default function RegisterPage() {
               {errors.submit}
             </div>
           )}
-
-          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-muted)", lineHeight: 1.5 }}>
-            Your browser&apos;s SpacetimeDB identity is used to access this account.
-            No app password is stored by CC.
-          </p>
 
           <Button
             type="submit"

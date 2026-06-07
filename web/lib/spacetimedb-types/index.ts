@@ -42,6 +42,7 @@ import CreateMeetingReducer from "./create_meeting_reducer";
 import EndMeetingReducer from "./end_meeting_reducer";
 import JoinChannelReducer from "./join_channel_reducer";
 import LeaveCompanyReducer from "./leave_company_reducer";
+import LoginReducer from "./login_reducer";
 import LogoutReducer from "./logout_reducer";
 import MarkSummaryIndexedReducer from "./mark_summary_indexed_reducer";
 import OpenDmReducer from "./open_dm_reducer";
@@ -62,6 +63,7 @@ import UpdateUserRoleReducer from "./update_user_role_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AuthCredentialRow from "./auth_credential_table";
 import ChannelRow from "./channel_table";
 import ChannelMemberRow from "./channel_member_table";
 import CompanyRow from "./company_table";
@@ -77,6 +79,17 @@ import UserRow from "./user_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  authCredential: __table({
+    name: 'auth_credential',
+    indexes: [
+      { accessor: 'userId', name: 'auth_credential_user_id_idx_btree', algorithm: 'btree', columns: [
+        'userId',
+      ] },
+    ],
+    constraints: [
+      { name: 'auth_credential_user_id_key', constraint: 'unique', columns: ['userId'] },
+    ],
+  }, AuthCredentialRow),
   channel: __table({
     name: 'channel',
     indexes: [
@@ -191,6 +204,7 @@ const reducersSchema = __reducers(
   __reducerSchema("end_meeting", EndMeetingReducer),
   __reducerSchema("join_channel", JoinChannelReducer),
   __reducerSchema("leave_company", LeaveCompanyReducer),
+  __reducerSchema("login", LoginReducer),
   __reducerSchema("logout", LogoutReducer),
   __reducerSchema("mark_summary_indexed", MarkSummaryIndexedReducer),
   __reducerSchema("open_dm", OpenDmReducer),
@@ -265,4 +279,3 @@ export class DbConnection extends __DbConnectionImpl<typeof REMOTE_MODULE> {
     return new SubscriptionBuilder(this);
   };
 }
-

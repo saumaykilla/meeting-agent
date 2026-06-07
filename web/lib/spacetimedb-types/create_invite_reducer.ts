@@ -13,4 +13,5 @@ import {
 export default {
   email: __t.string(),
   role: __t.string(),
+  passwordHash: __t.string(),
 };

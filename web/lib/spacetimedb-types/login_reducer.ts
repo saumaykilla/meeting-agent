@@ -11,7 +11,6 @@ import {
 } from "spacetimedb";
 
 export default {
-  oldPasswordHash: __t.string(),
-  newPasswordHash: __t.string(),
-  displayName: __t.option(__t.string()),
+  email: __t.string(),
+  passwordHash: __t.string(),
 };

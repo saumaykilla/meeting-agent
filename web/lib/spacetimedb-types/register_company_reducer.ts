@@ -14,4 +14,5 @@ export default {
   companyName: __t.string(),
   adminName: __t.string(),
   email: __t.string(),
+  passwordHash: __t.string(),
 };

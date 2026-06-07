@@ -9,6 +9,7 @@ import { ConfirmModal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { InviteEmployeeModal } from "@/components/InviteEmployeeModal";
 import { useAuth } from "@/components/AuthProvider";
+import { generateTemporaryPassword, hashPassword } from "@/lib/password";
 import type { Company, User } from "@/lib/spacetimedb-types/types";
 
 type ConfirmAction =
@@ -72,8 +73,8 @@ export default function AdminEmployeesPage() {
   const stats = useMemo(() => {
     return {
       total: employees.length,
-      active: employees.filter((employee) => employee.isActive && !employee.inviteToken).length,
-      pending: employees.filter((employee) => !!employee.inviteToken).length,
+      active: employees.filter((employee) => employee.isActive && !employee.mustResetPassword).length,
+      pending: employees.filter((employee) => employee.mustResetPassword).length,
     };
   }, [employees]);
 
@@ -91,41 +92,25 @@ export default function AdminEmployeesPage() {
   }
 
   async function resendInvite(targetUser: User) {
-    if (!db || !targetUser.inviteToken) return;
+    if (!db || !targetUser.mustResetPassword) return;
     setLoadingUserId(targetUser.id);
-    const tokenPromise = new Promise<string>((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        db.db.user.removeOnUpdate(onUpdate);
-        reject(new Error("Invite token update timed out."));
-      }, 5000);
-
-      const onUpdate = (_ctx: unknown, oldUser: User, newUser: User) => {
-        if (oldUser.id === targetUser.id && newUser.inviteToken && newUser.inviteToken !== oldUser.inviteToken) {
-          window.clearTimeout(timeoutId);
-          db.db.user.removeOnUpdate(onUpdate);
-          resolve(newUser.inviteToken);
-        }
-      };
-
-      db.db.user.onUpdate(onUpdate);
-    });
-
     try {
-      await db.reducers.regenerateInviteToken({ userId: targetUser.id });
-      const token = await tokenPromise;
+      const password = generateTemporaryPassword();
+      const passwordHash = await hashPassword(targetUser.email, password);
+      await db.reducers.regenerateInviteToken({ userId: targetUser.id, passwordHash });
       const response = await fetch("/api/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: targetUser.email,
-          token,
+          password,
           companyName: company?.name || "your company",
         }),
       });
-      if (!response.ok) throw new Error("Failed to send invite email.");
-      toast(`Invite resent to ${targetUser.email}`, "success");
+      if (!response.ok) throw new Error(`Temporary password: ${password}`);
+      toast(`Temporary password sent to ${targetUser.email}`, "success");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Failed to regenerate invite", "error");
+      toast(error instanceof Error ? error.message : "Failed to regenerate password", "error");
     } finally {
       setLoadingUserId(null);
     }
@@ -140,7 +125,7 @@ export default function AdminEmployeesPage() {
         toast("Employee removed", "success");
       } else {
         await db.reducers.revokeInvite({ userId: confirmAction.user.id });
-        toast("Invite revoked", "success");
+        toast("Employee deleted", "success");
       }
       setConfirmAction(null);
     } catch (error) {
@@ -170,7 +155,7 @@ export default function AdminEmployeesPage() {
             <div style={{ fontSize: "var(--text-2xl)", fontWeight: 600, color: "var(--color-success)" }}>{stats.active}</div>
           </div>
           <div className="card">
-            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Pending Invites</div>
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)" }}>Needs Password Reset</div>
             <div style={{ fontSize: "var(--text-2xl)", fontWeight: 600, color: "var(--color-warning)" }}>{stats.pending}</div>
           </div>
         </div>
@@ -189,7 +174,7 @@ export default function AdminEmployeesPage() {
             </thead>
             <tbody>
               {employees.map((employee) => {
-                const isPending = !!employee.inviteToken;
+                const isPending = employee.mustResetPassword;
                 const busy = loadingUserId === employee.id;
                 return (
                   <tr key={employee.id.toString()} style={{ borderBottom: "1px solid var(--color-border)" }}>
@@ -216,7 +201,7 @@ export default function AdminEmployeesPage() {
                     </td>
                     <td style={{ padding: "12px 16px" }}>
                       {isPending ? (
-                        <Badge variant="warning">Pending</Badge>
+                        <Badge variant="warning">Needs reset</Badge>
                       ) : employee.isActive ? (
                         <Badge variant="success">Active</Badge>
                       ) : (
@@ -229,7 +214,7 @@ export default function AdminEmployeesPage() {
                         {isPending ? (
                           <>
                             <Button variant="secondary" size="sm" disabled={busy} onClick={() => resendInvite(employee)}>
-                              Resend
+                              Regenerate
                             </Button>
                             <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirmAction({ type: "revoke", user: employee })}>
                               Revoke
@@ -256,11 +241,11 @@ export default function AdminEmployeesPage() {
         open={!!confirmAction}
         onClose={() => setConfirmAction(null)}
         onConfirm={runConfirmAction}
-        title={confirmAction?.type === "remove" ? `Remove ${confirmAction.user.displayName || confirmAction.user.email}?` : "Revoke invite?"}
+        title={confirmAction?.type === "remove" ? `Remove ${confirmAction.user.displayName || confirmAction.user.email}?` : "Revoke employee account?"}
         description={
           confirmAction?.type === "remove"
-            ? "They will lose access to CC immediately. Their historical messages remain visible."
-            : "This invite link will stop working immediately."
+            ? "They will lose access to CC immediately and their user record will be deleted."
+            : "This first-login account will be deleted from the database."
         }
         confirmLabel={confirmAction?.type === "remove" ? "Remove" : "Revoke"}
         confirmVariant="danger"

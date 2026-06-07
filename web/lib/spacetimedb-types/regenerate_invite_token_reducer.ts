@@ -12,4 +12,5 @@ import {
 
 export default {
   userId: __t.u64(),
+  passwordHash: __t.string(),
 };

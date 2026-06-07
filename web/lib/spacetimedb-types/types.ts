@@ -108,8 +108,15 @@ export const User = __t.object("User", {
   displayName: __t.string(),
   role: __t.string(),
   inviteToken: __t.option(__t.string()),
+  mustResetPassword: __t.bool(),
   isActive: __t.bool(),
   createdAt: __t.u64(),
 });
 export type User = __Infer<typeof User>;
 
+export const AuthCredential = __t.object("AuthCredential", {
+  userId: __t.u64(),
+  email: __t.string(),
+  passwordHash: __t.string(),
+});
+export type AuthCredential = __Infer<typeof AuthCredential>;

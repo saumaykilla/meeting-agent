@@ -14,6 +14,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
+      return;
+    }
+    if (!isLoading && user?.mustResetPassword) {
+      router.push("/setup");
     }
   }, [user, isLoading, router]);
 

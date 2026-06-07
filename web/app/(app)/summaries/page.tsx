@@ -101,17 +101,12 @@ export default function SummariesPage() {
     return userIds.map((userId) => userById.get(userId)).filter(Boolean) as User[];
   }
 
-  const indexedCount = summaries.filter((summary) => summary.pineconeIndexed).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <div className="page-header">
         <h1 className="page-title" style={{ flex: 1 }}>Meeting Summaries</h1>
-        <div className="card-agent" style={{ padding: "8px 14px" }}>
-          <span style={{ fontSize: "var(--text-sm)", color: "var(--color-agent-text)", fontWeight: "var(--font-semibold)" }}>
-            CC Memory has indexed {indexedCount} {indexedCount === 1 ? "meeting" : "meetings"}
-          </span>
-        </div>
+
       </div>
 
       <div

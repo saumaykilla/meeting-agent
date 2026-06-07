@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { SettingsLayout } from "@/components/layout/SettingsLayout";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/components/AuthProvider";
+import { hashPassword } from "@/lib/password";
 
 const settingsNav = [
   { label: "Profile", href: "/settings/profile" },
@@ -43,7 +44,7 @@ function ToggleRow({
 }
 
 export default function ProfileSettingsPage() {
-  const { user, token, isLoading, db, logout } = useAuth();
+  const { user, isLoading, db, logout } = useAuth();
   const [form, setForm] = useState({
     displayName: "",
     email: "",
@@ -54,7 +55,13 @@ export default function ProfileSettingsPage() {
     notifySummaryNotifications: true,
     allowDirectMessagesFromAll: true,
   });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
   const [loading, setLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const { toast } = useToast();
 
@@ -78,6 +85,10 @@ export default function ProfileSettingsPage() {
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function setPasswordField<K extends keyof typeof passwordForm>(key: K, value: (typeof passwordForm)[K]) {
+    setPasswordForm((prev) => ({ ...prev, [key]: value }));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -126,6 +137,38 @@ export default function ProfileSettingsPage() {
       console.error(err);
       toast("Transfer admin role before leaving", "error");
       setLeaving(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    if (!db || !user) return;
+    if (!passwordForm.currentPassword) {
+      toast("Current password is required", "error");
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      toast("New password must be at least 8 characters", "error");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast("Passwords do not match", "error");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await db.reducers.updatePassword({
+        oldPasswordHash: await hashPassword(user.email, passwordForm.currentPassword),
+        newPasswordHash: await hashPassword(user.email, passwordForm.newPassword),
+        displayName: undefined,
+      });
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast("Password updated", "success");
+    } catch (err) {
+      console.error(err);
+      toast("Could not update password", "error");
+    } finally {
+      setPasswordLoading(false);
     }
   }
 
@@ -203,31 +246,13 @@ export default function ProfileSettingsPage() {
             </section>
 
             <section id="security" className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              <h2 style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>Security & Session</h2>
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--color-muted)", lineHeight: 1.5 }}>
-                CC signs you in with a private SpacetimeDB session token. Keep it secure; anyone with this token can access this account.
-              </p>
-              <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "flex-end" }}>
-                <div style={{ flex: 1 }}>
-                  <Input
-                    label="SpacetimeDB token"
-                    type="password"
-                    value={token || ""}
-                    readOnly
-                    style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    if (!token) return;
-                    navigator.clipboard.writeText(token);
-                    toast("Access token copied", "success");
-                  }}
-                  disabled={!token}
-                >
-                  Copy
+              <h2 style={{ fontSize: "var(--text-md)", fontWeight: "var(--font-semibold)" }}>Security</h2>
+              <Input label="Current password" type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordField("currentPassword", event.target.value)} />
+              <Input label="New password" type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordField("newPassword", event.target.value)} />
+              <Input label="Confirm new password" type="password" value={passwordForm.confirmPassword} onChange={(event) => setPasswordField("confirmPassword", event.target.value)} />
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Button type="button" variant="secondary" loading={passwordLoading} onClick={handlePasswordChange}>
+                  Update password
                 </Button>
               </div>
             </section>
